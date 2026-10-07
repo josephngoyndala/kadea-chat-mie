@@ -1,6 +1,17 @@
 @let(variant = $props.get('variant') || 'success')
 @inject({ variant, autoDismiss: $props.get('autoDismiss') })
-@let(classes = ['alert', `alert--${variant}`])
+@let(variantClasses = {
+  destructive: 'border-l-brand',
+  success: 'border-l-emerald-500',
+})
+@let(iconClasses = {
+  destructive: 'text-brand',
+  success: 'text-emerald-600',
+})
+@let(classes = [
+  'pointer-events-auto flex w-[400px] max-w-[calc(100vw-2rem)] items-start gap-3 rounded-2xl border border-l-4 border-line bg-white p-4 shadow-card',
+  variantClasses[variant],
+])
 
 <div {{
   $props
@@ -10,16 +21,17 @@
       class: classes,
       'x-data': 'alert',
       'x-show': 'isVisible',
+      'x-transition': true,
       'x-cloak': true,
     })
     .toAttrs()
 }}>
-  <span class="alert__icon">
+  <span class="mt-px flex size-[18px] flex-none items-center justify-center {{ iconClasses[variant] }}">
     @if(variant === 'destructive')
       @svg('lucide:circle-alert', { width: 18, height: 18 })
     @else
       @svg('lucide:circle-check', { width: 18, height: 18 })
     @end
   </span>
-  <div class="alert__body">{{{ await $slots.main() }}}</div>
+  <div class="flex min-w-0 flex-1 flex-col gap-1">{{{ await $slots.main() }}}</div>
 </div>

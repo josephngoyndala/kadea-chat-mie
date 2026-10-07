@@ -1,25 +1,19 @@
-{{--
-  The frame for an app page: renders an optional heading and description,
-  and optional actions (buttons, links) passed through the `actions` slot.
-  The document title is set on the layout, for example
-  @layouts.app({ title: 'Reports' }).
---}}
 @let(pageTitle = $props.get('title'))
 @let(pageDescription = $props.get('description'))
 
-<div class="page">
+<div class="mx-auto flex w-full max-w-5xl flex-col px-4 py-8 sm:px-8 sm:py-10">
   @if(pageTitle || pageDescription || $slots.actions)
-    <header class="page__header">
+    <header class="mb-7 flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
       <div>
         @if(pageTitle)
-          <h1 class="page__title">{{ pageTitle }}</h1>
+          <h1 class="text-2xl font-extrabold tracking-tight">{{ pageTitle }}</h1>
         @end
         @if(pageDescription)
-          <p class="page__description">{{ pageDescription }}</p>
+          <p class="mt-1 text-[15px] text-muted">{{ pageDescription }}</p>
         @end
       </div>
       @if($slots.actions)
-        <div class="page__actions">{{{ await $slots.actions() }}}</div>
+        <div class="flex gap-3">{{{ await $slots.actions() }}}</div>
       @end
     </header>
   @end

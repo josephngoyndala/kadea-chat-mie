@@ -17,15 +17,25 @@
   sizes[$props.get('size', 'md')],
   $props.get('block') ? 'w-full' : '',
 ].filter(Boolean))
+@let(href = $props.has('href')
+  ? $props.get('href')
+  : $props.get('route')
+    ? urlFor($props.get('route'), $props.get('routeParams'), $props.get('routeOptions'))
+    : undefined)
+@let(attrs = $props.except(['text', 'variant', 'size', 'block', 'arrow', 'href', 'route', 'routeParams', 'routeOptions']))
 
-<button {{
-  $props
-    .except(['text', 'variant', 'size', 'block', 'arrow'])
-    .merge({ class: classes })
-    .toAttrs()
-}}>
-  {{{ buttonText }}}
-  @if($props.get('arrow'))
-    @svg('lucide:chevron-right', { width: 18, height: 18 })
-  @end
-</button>
+@if(href)
+  <a {{ attrs.merge({ href: href, class: classes }).toAttrs() }}>
+    {{{ buttonText }}}
+    @if($props.get('arrow'))
+      @svg('lucide:chevron-right', { width: 18, height: 18 })
+    @end
+  </a>
+@else
+  <button {{ attrs.merge({ class: classes }).toAttrs() }}>
+    {{{ buttonText }}}
+    @if($props.get('arrow'))
+      @svg('lucide:chevron-right', { width: 18, height: 18 })
+    @end
+  </button>
+@end
