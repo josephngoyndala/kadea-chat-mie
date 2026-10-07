@@ -8,7 +8,15 @@ import { BaseModel, column } from '@adonisjs/lucid/orm'
 import { DateTime } from 'luxon'
 
 export class AuthTokenSchema extends BaseModel {
-  static $columns = ['createdAt', 'expiresAt', 'id', 'tokenHash', 'type', 'usedAt', 'userId'] as const
+  static $columns = [
+    'createdAt',
+    'expiresAt',
+    'id',
+    'tokenHash',
+    'type',
+    'usedAt',
+    'userId',
+  ] as const
   $columns = AuthTokenSchema.$columns
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
@@ -27,7 +35,15 @@ export class AuthTokenSchema extends BaseModel {
 }
 
 export class ConversationMemberSchema extends BaseModel {
-  static $columns = ['conversationId', 'id', 'joinedAt', 'lastDeliveredMessageId', 'lastReadMessageId', 'role', 'userId'] as const
+  static $columns = [
+    'conversationId',
+    'id',
+    'joinedAt',
+    'lastDeliveredMessageId',
+    'lastReadMessageId',
+    'role',
+    'userId',
+  ] as const
   $columns = ConversationMemberSchema.$columns
   @column()
   declare conversationId: number
@@ -46,7 +62,17 @@ export class ConversationMemberSchema extends BaseModel {
 }
 
 export class ConversationSchema extends BaseModel {
-  static $columns = ['avatarPath', 'createdAt', 'createdBy', 'id', 'lastMessageAt', 'name', 'privateKey', 'type', 'updatedAt'] as const
+  static $columns = [
+    'avatarPath',
+    'createdAt',
+    'createdBy',
+    'id',
+    'lastMessageAt',
+    'name',
+    'privateKey',
+    'type',
+    'updatedAt',
+  ] as const
   $columns = ConversationSchema.$columns
   @column()
   declare avatarPath: string | null
@@ -69,7 +95,15 @@ export class ConversationSchema extends BaseModel {
 }
 
 export class MessageAttachmentSchema extends BaseModel {
-  static $columns = ['createdAt', 'id', 'messageId', 'mimeType', 'originalName', 'sizeBytes', 'storagePath'] as const
+  static $columns = [
+    'createdAt',
+    'id',
+    'messageId',
+    'mimeType',
+    'originalName',
+    'sizeBytes',
+    'storagePath',
+  ] as const
   $columns = MessageAttachmentSchema.$columns
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
@@ -88,7 +122,15 @@ export class MessageAttachmentSchema extends BaseModel {
 }
 
 export class MessageSchema extends BaseModel {
-  static $columns = ['body', 'conversationId', 'createdAt', 'deletedAt', 'id', 'senderId', 'updatedAt'] as const
+  static $columns = [
+    'body',
+    'conversationId',
+    'createdAt',
+    'deletedAt',
+    'id',
+    'senderId',
+    'updatedAt',
+  ] as const
   $columns = MessageSchema.$columns
   @column()
   declare body: string | null
@@ -120,7 +162,17 @@ export class UserBlockSchema extends BaseModel {
 }
 
 export class UserSchema extends BaseModel {
-  static $columns = ['avatarPath', 'createdAt', 'email', 'emailVerifiedAt', 'fullName', 'id', 'lastSeenAt', 'password', 'updatedAt'] as const
+  static $columns = [
+    'avatarPath',
+    'createdAt',
+    'email',
+    'emailVerifiedAt',
+    'fullName',
+    'id',
+    'lastSeenAt',
+    'password',
+    'updatedAt',
+  ] as const
   $columns = UserSchema.$columns
   @column()
   declare avatarPath: string | null
