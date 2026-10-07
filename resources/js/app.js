@@ -1,4 +1,5 @@
 import Alpine from 'alpinejs'
+import '@fontsource-variable/plus-jakarta-sans'
 
 Alpine.data('alert', function () {
   return {
