@@ -47,7 +47,7 @@
     "@japa/runner": "^5.3.0",
     "@poppinss/ts-exec": "^1.4.4",
     "@types/alpinejs": "^3.13.11",
-    "@types/luxon": "^3.7.5",
+    "@types/luxon": "^3.7.6",
     "@types/node": "~26.6.2",
     "alpinejs": "^3.17.4",
     "eslint": "^10.11.0",
@@ -71,6 +71,7 @@
     "edge-iconify": "^2.0.2",
     "edge.js": "^6.5.1",
     "luxon": "^3.7.2",
+    "pg": "^8.23.1",
     "reflect-metadata": "^0.2.2"
   },
   "hotHook": {
