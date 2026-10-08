@@ -1,10 +1,10 @@
 <div class="pointer-events-none fixed inset-x-0 top-5 z-50 flex flex-col items-center gap-3">
-  @if(flashMessages.has('error'))
+  @if(flashMessages?.has('error'))
     @alert.root({ variant: 'destructive', autoDismiss: true })
       @!alert.title({ text: flashMessages.get('error') })
     @end
   @end
-  @if(flashMessages.has('success'))
+  @if(flashMessages?.has('success'))
     @alert.root({ variant: 'success', autoDismiss: true })
       @!alert.title({ text: flashMessages.get('success') })
     @end

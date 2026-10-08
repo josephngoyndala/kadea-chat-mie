@@ -11,8 +11,9 @@ export default class HttpExceptionHandler extends ExceptionHandler {
 
   /**
    * Status pages are used to display a custom HTML pages for certain error
-   * codes. You might want to enable them in production only, but feel
-   * free to enable them in development as well.
+   * codes. En développement, on garde la page de débogage pour les erreurs
+   * serveur (500) afin de voir la pile d'appels. Passe cette valeur à `true`
+   * pour prévisualiser la page 500 de Kadea Chat en local.
    */
   protected renderStatusPages = app.inProduction
 
@@ -34,6 +35,15 @@ export default class HttpExceptionHandler extends ExceptionHandler {
    * response to the client
    */
   async handle(error: unknown, ctx: HttpContext) {
+    /**
+     * Une route inconnue n'est pas un bug : on affiche toujours la page 404
+     * de Kadea Chat, y compris en développement.
+     */
+    if (this.isRouteNotFound(error)) {
+      const html = await ctx.view.render('pages/errors/not_found', { error })
+      return ctx.response.status(404).send(html)
+    }
+
     return super.handle(error, ctx)
   }
 
@@ -45,5 +55,17 @@ export default class HttpExceptionHandler extends ExceptionHandler {
    */
   async report(error: unknown, ctx: HttpContext) {
     return super.report(error, ctx)
+  }
+
+  /**
+   * Détecte l'erreur levée quand aucune route ne correspond à l'URL.
+   */
+  private isRouteNotFound(error: unknown) {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'E_ROUTE_NOT_FOUND'
+    )
   }
 }
