@@ -2,27 +2,40 @@
 @let(inputValue = useOldValue
   ? $context.oldValue || $props.get('value') || ''
   : $props.get('value') || '')
-@let(classes = ['field__input'])
+@let(icon = $props.get('icon'))
+@let(classes = [
+  'h-14 w-full rounded-field border border-line bg-white text-[15px] text-ink outline-none transition placeholder:text-[#8d8d8d]',
+  'focus:border-brand focus:ring-4 focus:ring-brand/15',
+  'aria-[invalid=true]:border-brand aria-[invalid=true]:ring-4 aria-[invalid=true]:ring-brand/10',
+  icon ? 'pl-12 pr-4' : 'px-4',
+])
 
-<input {{
-  $props
-    .except(['value'])
-    .merge({
-      name: $context.name,
-      id: $context.id,
-      value: inputValue,
-      class: classes,
-      type: 'text',
-      'aria-invalid': $context.hasErrors ? 'true' : false,
-      'data-invalid': $context.hasErrors ? 'true' : false,
-      autofocus: $context.hasErrors ? 'true' : false,
-      'aria-describedby': $context.hasErrors ? `${$context.id}-error` : '',
-    })
-    .mergeIf($props.get('keepChecked'), {
-      checked: !!(
-        $context.oldValue &&
-        ($context.oldValue === inputValue || $context.oldValue === 'on')
-      ),
-    })
-    .toAttrs()
-}} />
+<div class="relative">
+  @if(icon)
+    <span class="pointer-events-none absolute inset-y-0 left-0 grid w-12 place-items-center text-muted">
+      @svg(icon, { width: 20, height: 20 })
+    </span>
+  @end
+  <input {{
+    $props
+      .except(['value', 'icon'])
+      .merge({
+        name: $context.name,
+        id: $context.id,
+        value: inputValue,
+        class: classes,
+        type: 'text',
+        'aria-invalid': $context.hasErrors ? 'true' : false,
+        'data-invalid': $context.hasErrors ? 'true' : false,
+        autofocus: $context.hasErrors ? 'true' : false,
+        'aria-describedby': $context.hasErrors ? `${$context.id}-error` : '',
+      })
+      .mergeIf($props.get('keepChecked'), {
+        checked: !!(
+          $context.oldValue &&
+          ($context.oldValue === inputValue || $context.oldValue === 'on')
+        ),
+      })
+      .toAttrs()
+  }} />
+</div>

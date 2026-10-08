@@ -1,15 +1,42 @@
 @let(buttonTextFromSlot = await $slots.main())
 @let(buttonText = buttonTextFromSlot.trim() ? buttonTextFromSlot : ($props.get('text') ?? ''))
 @let(variant = $props.get('variant', 'primary'))
-@let(sizeMod = $props.get('size') === 'sm' ? 'btn--sm' : '')
-@let(block = $props.get('block') ? 'btn--block' : '')
-@let(classes = ['btn', `btn--${variant}`, sizeMod, block].filter(Boolean))
+@let(variants = {
+  primary: 'bg-brand text-white shadow-brand hover:bg-brand-600',
+  dark: 'bg-ink text-white hover:bg-black',
+  secondary: 'border border-line bg-white text-ink hover:bg-paper',
+  ghost: 'text-ink hover:bg-paper',
+})
+@let(sizes = {
+  md: 'h-14 px-6 text-[15px]',
+  nav: 'h-12 px-5 text-[15px]',
+  sm: 'h-10 px-4 text-sm',
+})
+@let(classes = [
+  'inline-flex cursor-pointer items-center justify-center gap-2 rounded-field font-semibold transition active:scale-[0.98] disabled:pointer-events-none disabled:opacity-60',
+  variants[variant],
+  sizes[$props.get('size', 'md')],
+  $props.get('block') ? 'w-full' : '',
+].filter(Boolean))
+@let(href = $props.has('href')
+  ? $props.get('href')
+  : $props.get('route')
+    ? urlFor($props.get('route'), $props.get('routeParams'), $props.get('routeOptions'))
+    : undefined)
+@let(attrs = $props.except(['text', 'variant', 'size', 'block', 'arrow', 'href', 'route', 'routeParams', 'routeOptions']))
 
-<button {{
-  $props
-    .except(['text', 'variant', 'size', 'block'])
-    .merge({ class: classes })
-    .toAttrs()
-}}>
-  {{{ buttonText }}}
-</button>
+@if(href)
+  <a {{ attrs.merge({ href: href, class: classes }).toAttrs() }}>
+    {{{ buttonText }}}
+    @if($props.get('arrow'))
+      @svg('lucide:chevron-right', { width: 18, height: 18 })
+    @end
+  </a>
+@else
+  <button {{ attrs.merge({ class: classes }).toAttrs() }}>
+    {{{ buttonText }}}
+    @if($props.get('arrow'))
+      @svg('lucide:chevron-right', { width: 18, height: 18 })
+    @end
+  </button>
+@end

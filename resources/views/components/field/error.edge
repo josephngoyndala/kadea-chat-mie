@@ -1,6 +1,7 @@
-@let(classes = ['field__error'])
+@let(classes = ['flex items-center gap-1.5 text-[13px] font-medium text-brand'])
 @if($context.hasErrors)
   <span {{ $props.merge({ id: `${$context.id}-error`, class: classes }).toAttrs() }}>
+    @svg('lucide:circle-alert', { width: 14, height: 14 })
     @each(message in $context.errors)
       {{ message }}
     @end

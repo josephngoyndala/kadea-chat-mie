@@ -1,16 +1,20 @@
-@marketing()
-  <div class="home">
-    <article class="prose-card">
-      <div class="pc-top">
-        <span class="pc-status mono tag" style="color: var(--subtle);">
-          <span class="dot"></span>
-          404
-        </span>
-      </div>
-      <div class="pc-lead"><span>Not found.</span> <em>That route hasn't been built yet.</em></div>
-      <p class="pc-para">
-        The page you tried to reach doesn't exist. Check the URL or head back home.
+@layouts.marketing({ title: 'Page introuvable' })
+  <section class="grid min-h-screen place-items-center px-6 pb-16 pt-28">
+    <div class="flex max-w-lg flex-col items-center text-center">
+      <p class="text-[120px] font-extrabold leading-none tracking-[-0.06em] text-brand sm:text-[160px]">
+        404
       </p>
-    </article>
-  </div>
+      <h1 class="mt-4 text-3xl font-extrabold tracking-tight sm:text-4xl">
+        Cette page n'existe pas.
+      </h1>
+      <p class="mt-4 text-lg leading-relaxed text-muted">
+        Le lien est peut-être incorrect, ou la page a été déplacée. Retournez à l'accueil pour reprendre la conversation.
+      </p>
+      <div class="mt-10">
+        @button({ route: 'home', arrow: true })
+          Retour à l'accueil
+        @end
+      </div>
+    </div>
+  </section>
 @end

@@ -1,17 +1,13 @@
-@layouts.app({ title: 'Dashboard' })
-  @page()
-    <div class="empty">
-      <div class="empty__mark">
-        @svg('lucide:layout-grid', { width: 22, height: 22 })
-      </div>
-      <h1>Your dashboard is ready</h1>
-      <p>
-        It's empty on purpose. A clean starting point with nothing to undo. Add your first route and component to begin.
-      </p>
-      <p class="mono" style="font-size: 12.5px; color: var(--subtle); margin-top: 4px;">
-        Start in
-        <span class="kbd">resources/views/pages/dashboard.edge</span>
+@layouts.app({ title: 'Mes discussions' })
+  <div class="grid min-h-[calc(100vh-4rem)] place-items-center px-6">
+    <div class="flex max-w-sm flex-col items-center gap-4 text-center">
+      <span class="grid size-16 place-items-center rounded-2xl bg-brand-50 text-brand">
+        @svg('lucide:messages-square', { width: 28, height: 28 })
+      </span>
+      <h1 class="text-2xl font-extrabold tracking-tight">Aucune discussion pour l'instant</h1>
+      <p class="text-muted">
+        Recherchez un utilisateur pour démarrer votre première conversation, ou créez un groupe.
       </p>
     </div>
-  @end
+  </div>
 @end
