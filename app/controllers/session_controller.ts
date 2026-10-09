@@ -1,36 +1,62 @@
+import { errors } from '@adonisjs/auth'
 import User from '#models/user'
 import { loginValidator } from '#validators/user'
 import type { HttpContext } from '@adonisjs/core/http'
 
 /**
- * SessionController handles user authentication and session management.
- * It provides methods for displaying the login page, authenticating users,
- * and logging out.
+ * SessionController gère la connexion et la déconnexion : affichage du
+ * formulaire, vérification des identifiants et fin de session.
  */
 export default class SessionController {
   /**
-   * Display the login page
+   * Affiche la page de connexion
    */
   async create({ view }: HttpContext) {
     return view.render('pages/auth/login')
   }
 
   /**
-   * Authenticate user credentials and create a new session
+   * Vérifie les identifiants, refuse les comptes dont l'adresse n'est pas
+   * confirmée, puis crée la session
    */
-  async store({ request, auth, response }: HttpContext) {
+  async store({ request, auth, response, session }: HttpContext) {
     const { email, password } = await request.validateUsing(loginValidator)
-    const user = await User.verifyCredentials(email, password)
+
+    let user: User
+    try {
+      user = await User.verifyCredentials(email, password)
+    } catch (error) {
+      if (error instanceof errors.E_INVALID_CREDENTIALS) {
+        session.flashOnly(['email'])
+        session.flash('error', 'Adresse e-mail ou mot de passe incorrect.')
+        return response.redirect().back()
+      }
+      throw error
+    }
+
+    /**
+     * Les identifiants sont corrects : on peut maintenant dire à
+     * l'utilisateur que son adresse doit être confirmée.
+     */
+    if (!user.emailVerifiedAt) {
+      session.put('pending_verification_email', user.email)
+      session.flash(
+        'error',
+        "Votre adresse e-mail n'est pas encore confirmée. Consultez votre boîte mail ou demandez un nouveau lien."
+      )
+      return response.redirect().toRoute('email_verification.notice')
+    }
 
     await auth.use('web').login(user)
-    response.redirect().toRoute('dashboard')
+    return response.redirect().toRoute('dashboard')
   }
 
   /**
-   * Log out the current user and destroy their session
+   * Déconnecte l'utilisateur et détruit sa session
    */
-  async destroy({ auth, response }: HttpContext) {
+  async destroy({ auth, response, session }: HttpContext) {
     await auth.use('web').logout()
-    response.redirect().toRoute('session.create')
+    session.flash('success', 'Vous avez été déconnecté.')
+    return response.redirect().toRoute('session.create')
   }
 }
