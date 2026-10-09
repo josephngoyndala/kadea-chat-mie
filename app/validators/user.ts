@@ -20,10 +20,12 @@ export const signupValidator = vine.create({
 
 /**
  * Validateur de la connexion (avant la vérification des identifiants).
+ * `remember` correspond à la case « Se souvenir de moi ».
  */
 export const loginValidator = vine.create({
   email: email(),
   password: vine.string(),
+  remember: vine.accepted().optional(),
 })
 
 /**

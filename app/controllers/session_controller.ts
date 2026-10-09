@@ -17,10 +17,11 @@ export default class SessionController {
 
   /**
    * Vérifie les identifiants, refuse les comptes dont l'adresse n'est pas
-   * confirmée, puis crée la session
+   * confirmée, puis crée la session (avec un jeton « se souvenir de moi »
+   * si la case est cochée)
    */
   async store({ request, auth, response, session }: HttpContext) {
-    const { email, password } = await request.validateUsing(loginValidator)
+    const { email, password, remember } = await request.validateUsing(loginValidator)
 
     let user: User
     try {
@@ -47,12 +48,18 @@ export default class SessionController {
       return response.redirect().toRoute('email_verification.notice')
     }
 
-    await auth.use('web').login(user)
-    return response.redirect().toRoute('dashboard')
+    await auth.use('web').login(user, !!remember)
+
+    /**
+     * Renvoie l'utilisateur vers la page qu'il voulait ouvrir avant d'être
+     * redirigé vers la connexion, ou vers le tableau de bord par défaut.
+     */
+    return response.redirect().toIntendedRoute('dashboard')
   }
 
   /**
-   * Déconnecte l'utilisateur et détruit sa session
+   * Déconnecte l'utilisateur, détruit sa session et supprime son jeton
+   * « se souvenir de moi »
    */
   async destroy({ auth, response, session }: HttpContext) {
     await auth.use('web').logout()

@@ -19,10 +19,11 @@ const authConfig = defineConfig({
      */
     web: sessionGuard({
       /**
-       * Whether to use "remember me" tokens for persistent authentication.
-       * When enabled, users can stay logged in across browser sessions.
+       * "Se souvenir de moi" : l'utilisateur reste connecté même après
+       * la fin de sa session, pendant 30 jours.
        */
-      useRememberMeTokens: false,
+      useRememberMeTokens: true,
+      rememberMeTokensAge: '30 days',
 
       /**
        * User provider configuration.
