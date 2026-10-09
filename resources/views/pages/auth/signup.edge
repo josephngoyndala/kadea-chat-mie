@@ -55,14 +55,17 @@
       @!field.error()
     @end
 
-    <label class="flex cursor-pointer items-start gap-3 text-sm text-ink">
-      <input type="checkbox" name="acceptTerms" required class="mt-0.5 size-5 shrink-0 rounded accent-brand" />
-      <span>
-        J'accepte les
-        <a href="#" class="font-semibold text-brand hover:underline">conditions d'utilisation</a>
-        et la politique de confidentialité.
-      </span>
-    </label>
+    @field.root({ name: 'acceptTerms' })
+      <label class="flex cursor-pointer items-start gap-3 text-sm text-ink">
+        <input type="checkbox" name="acceptTerms" required class="mt-0.5 size-5 shrink-0 rounded accent-brand" />
+        <span>
+          J'accepte les
+          <a href="#" class="font-semibold text-brand hover:underline">conditions d'utilisation</a>
+          et la politique de confidentialité.
+        </span>
+      </label>
+      @!field.error()
+    @end
 
     @button({ type: 'submit', block: true, 'x-bind:disabled': 'submitting' })
       <span x-show="!submitting" class="inline-flex items-center gap-2">

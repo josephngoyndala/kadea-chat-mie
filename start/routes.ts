@@ -20,6 +20,10 @@ router
 
     router.get('login', [controllers.Session, 'create'])
     router.post('login', [controllers.Session, 'store'])
+
+    router.get('email/verification', [controllers.EmailVerification, 'notice'])
+    router.get('email/verify/:token', [controllers.EmailVerification, 'verify'])
+    router.post('email/verification/resend', [controllers.EmailVerification, 'resend'])
   })
   .use(middleware.guest())
 
