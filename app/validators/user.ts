@@ -50,8 +50,37 @@ export const resetPasswordValidator = vine.create({
   passwordConfirmation: vine.string().sameAs('password'),
 })
 
+/**
+ * Validateur de la modification du nom depuis le profil.
+ */
+export const updateProfileValidator = vine.create({
+  fullName: vine.string().trim().minLength(2).maxLength(100),
+})
+
+/**
+ * Validateur de la photo de profil : images JPG, PNG ou WEBP, 2 Mo maximum.
+ */
+export const updateAvatarValidator = vine.create({
+  avatar: vine.file({
+    size: '2mb',
+    extnames: ['jpg', 'jpeg', 'png', 'webp'],
+  }),
+})
+
+/**
+ * Validateur du changement de mot de passe depuis le profil.
+ */
+export const updatePasswordValidator = vine.create({
+  currentPassword: vine.string(),
+  password: password(),
+  passwordConfirmation: vine.string().sameAs('password'),
+})
+
 signupValidator.messagesProvider = frenchMessages()
 loginValidator.messagesProvider = frenchMessages()
 resendVerificationValidator.messagesProvider = frenchMessages()
 forgotPasswordValidator.messagesProvider = frenchMessages()
 resetPasswordValidator.messagesProvider = frenchMessages()
+updateProfileValidator.messagesProvider = frenchMessages()
+updateAvatarValidator.messagesProvider = frenchMessages()
+updatePasswordValidator.messagesProvider = frenchMessages()

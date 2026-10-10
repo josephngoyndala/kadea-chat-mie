@@ -36,5 +36,11 @@ router
   .group(() => {
     router.on('/dashboard').render('pages/dashboard').as('dashboard')
     router.post('logout', [controllers.Session, 'destroy'])
+
+    router.get('profile', [controllers.Profile, 'show'])
+    router.post('profile', [controllers.Profile, 'update'])
+    router.post('profile/avatar', [controllers.Profile, 'updateAvatar'])
+    router.post('profile/avatar/delete', [controllers.Profile, 'destroyAvatar'])
+    router.post('profile/password', [controllers.Profile, 'updatePassword'])
   })
   .use(middleware.auth())

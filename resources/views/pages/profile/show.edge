@@ -1,0 +1,174 @@
+@layouts.app({ title: 'Mon profil' })
+  @let(avatarUrl = user.avatarPath ? await driveUrl(user.avatarPath) : null)
+
+  @page({
+    title: 'Mon profil',
+    description: 'Gérez vos informations personnelles et la sécurité de votre compte.',
+  })
+    <div class="flex max-w-3xl flex-col gap-6">
+
+      {{-- Photo de profil --}}
+      <section class="rounded-card border border-line bg-white p-6 shadow-card sm:p-8">
+        <h2 class="text-lg font-bold tracking-tight">Photo de profil</h2>
+        <p class="mt-1 text-sm text-muted">Image JPG, PNG ou WEBP, 2 Mo maximum.</p>
+
+        <div class="mt-6 flex flex-col gap-6 sm:flex-row sm:items-center">
+          @if(avatarUrl)
+            @!avatar({ src: avatarUrl, name: user.fullName, size: 96 })
+          @else
+            @!avatar({ initials: user.initials, size: 96 })
+          @end
+
+          <div class="flex flex-1 flex-col gap-3">
+            @form({
+              route: 'profile.update_avatar',
+              method: 'POST',
+              enctype: 'multipart/form-data',
+              class: 'flex flex-col gap-3',
+              'x-data': '{ submitting: false }',
+              'x-on:submit': 'submitting = true',
+            })
+              @field.root({ name: 'avatar' })
+                <input
+                  type="file"
+                  name="avatar"
+                  id="avatar"
+                  required
+                  accept="image/png,image/jpeg,image/webp"
+                  class="block w-full cursor-pointer rounded-field border border-line bg-white text-sm text-muted file:mr-4 file:cursor-pointer file:border-0 file:bg-brand-50 file:px-4 file:py-3 file:font-semibold file:text-brand"
+                />
+                @!field.error()
+              @end
+
+              <div class="flex flex-wrap items-center gap-3">
+                @button({ type: 'submit', size: 'sm', 'x-bind:disabled': 'submitting' })
+                  <span x-show="!submitting">Enregistrer la photo</span>
+                  <span x-show="submitting" x-cloak class="inline-flex items-center gap-2">
+                    @svg('lucide:loader-circle', { width: 16, height: 16, class: 'animate-spin' })
+                    Envoi…
+                  </span>
+                @end
+              </div>
+            @end
+
+            @if(user.avatarPath)
+              @form({ route: 'profile.destroy_avatar', method: 'POST' })
+                @button({ type: 'submit', variant: 'ghost', size: 'sm' })
+                  @svg('lucide:trash-2', { width: 15, height: 15 })
+                  Supprimer la photo
+                @end
+              @end
+            @end
+          </div>
+        </div>
+      </section>
+
+      {{-- Informations personnelles --}}
+      <section class="rounded-card border border-line bg-white p-6 shadow-card sm:p-8">
+        <h2 class="text-lg font-bold tracking-tight">Informations personnelles</h2>
+
+        @form({
+          route: 'profile.update',
+          method: 'POST',
+          class: 'mt-6 flex flex-col gap-5',
+          'x-data': '{ submitting: false }',
+          'x-on:submit': 'submitting = true',
+        })
+          @field.root({ name: 'fullName' })
+            @!field.label({ text: 'Nom complet' })
+            @!input.control({
+              value: user.fullName,
+              autocomplete: 'name',
+              placeholder: 'Ex. Joël Mukendi',
+              icon: 'lucide:user',
+            })
+            @!field.error()
+          @end
+
+          <div class="flex flex-col gap-2">
+            <span class="text-sm font-semibold text-ink">Adresse e-mail</span>
+            <div class="relative">
+              <span class="pointer-events-none absolute inset-y-0 left-0 grid w-12 place-items-center text-muted">
+                @svg('lucide:mail', { width: 20, height: 20 })
+              </span>
+              <input
+                type="email"
+                value="{{ user.email }}"
+                readonly
+                class="h-14 w-full cursor-not-allowed rounded-field border border-line bg-paper pl-12 pr-4 text-[15px] text-muted"
+              />
+            </div>
+            <p class="text-xs text-muted">L'adresse e-mail ne peut pas être modifiée.</p>
+          </div>
+
+          <div>
+            @button({ type: 'submit', 'x-bind:disabled': 'submitting' })
+              <span x-show="!submitting">Enregistrer</span>
+              <span x-show="submitting" x-cloak class="inline-flex items-center gap-2">
+                @svg('lucide:loader-circle', { width: 18, height: 18, class: 'animate-spin' })
+                Enregistrement…
+              </span>
+            @end
+          </div>
+        @end
+      </section>
+
+      {{-- Mot de passe --}}
+      <section class="rounded-card border border-line bg-white p-6 shadow-card sm:p-8">
+        <h2 class="text-lg font-bold tracking-tight">Mot de passe</h2>
+        <p class="mt-1 text-sm text-muted">Choisissez un mot de passe d'au moins 8 caractères.</p>
+
+        @form({
+          route: 'profile.update_password',
+          method: 'POST',
+          class: 'mt-6 flex flex-col gap-5',
+          'x-data': '{ submitting: false }',
+          'x-on:submit': 'submitting = true',
+        })
+          @field.root({ name: 'currentPassword' })
+            @!field.label({ text: 'Mot de passe actuel' })
+            @!input.control({
+              type: 'password',
+              autocomplete: 'current-password',
+              placeholder: 'Votre mot de passe actuel',
+              icon: 'lucide:lock',
+            })
+            @!field.error()
+          @end
+
+          @field.root({ name: 'password' })
+            @!field.label({ text: 'Nouveau mot de passe' })
+            @!input.control({
+              type: 'password',
+              autocomplete: 'new-password',
+              placeholder: '8 caractères minimum',
+              icon: 'lucide:key-round',
+            })
+            @!field.error()
+          @end
+
+          @field.root({ name: 'passwordConfirmation' })
+            @!field.label({ text: 'Confirmer le nouveau mot de passe' })
+            @!input.control({
+              type: 'password',
+              autocomplete: 'new-password',
+              placeholder: 'Répétez le nouveau mot de passe',
+              icon: 'lucide:key-round',
+            })
+            @!field.error()
+          @end
+
+          <div>
+            @button({ type: 'submit', 'x-bind:disabled': 'submitting' })
+              <span x-show="!submitting">Changer le mot de passe</span>
+              <span x-show="submitting" x-cloak class="inline-flex items-center gap-2">
+                @svg('lucide:loader-circle', { width: 18, height: 18, class: 'animate-spin' })
+                Enregistrement…
+              </span>
+            @end
+          </div>
+        @end
+      </section>
+    </div>
+  @end
+@end

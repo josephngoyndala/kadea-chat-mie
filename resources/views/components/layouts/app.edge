@@ -1,4 +1,6 @@
 @let(pageTitle = $props.get('title'))
+@let(currentUser = auth?.user)
+@let(currentAvatarUrl = currentUser?.avatarPath ? await driveUrl(currentUser.avatarPath) : null)
 <!DOCTYPE html>
 <html lang="fr">
   <head>
@@ -11,11 +13,25 @@
   </head>
   <body class="min-h-screen bg-paper">
     <header class="sticky top-0 z-20 border-b border-line bg-white">
-      <div class="flex h-16 items-center justify-between px-4 sm:px-6">
+      <div class="flex h-16 items-center justify-between gap-3 px-4 sm:px-6">
         @!logo({ size: 34 })
+
+        <nav class="flex items-center gap-1">
+          @navLink({ route: 'dashboard', class: 'rounded-xl px-3 py-2 text-sm font-semibold text-muted transition hover:text-ink aria-[current=page]:bg-paper aria-[current=page]:text-ink' })
+            Discussions
+          @end
+          @navLink({ route: 'profile.show', class: 'rounded-xl px-3 py-2 text-sm font-semibold text-muted transition hover:text-ink aria-[current=page]:bg-paper aria-[current=page]:text-ink' })
+            Profil
+          @end
+        </nav>
+
         <div class="flex items-center gap-3">
-          @if(auth.user)
-            @!avatar({ initials: auth.user.initials, size: 36 })
+          @if(currentUser)
+            @if(currentAvatarUrl)
+              @!avatar({ src: currentAvatarUrl, name: currentUser.fullName, size: 36 })
+            @else
+              @!avatar({ initials: currentUser.initials, size: 36 })
+            @end
           @end
           @form({ route: 'session.destroy', method: 'POST' })
             @button({ type: 'submit', variant: 'secondary', size: 'sm' })
