@@ -14,7 +14,12 @@
 
         <div class="mt-6 flex flex-col items-center gap-6 sm:flex-row sm:items-center">
           @if(avatarUrl)
-            @!avatar({ src: avatarUrl, name: user.fullName, size: 96 })
+            <div class="flex flex-col items-center gap-2">
+              @photoViewer({ src: avatarUrl, alt: user.fullName ?? 'Photo de profil' })
+                @!avatar({ src: avatarUrl, name: user.fullName, size: 96 })
+              @end
+              <span class="text-xs text-muted">Appuyez pour agrandir</span>
+            </div>
           @else
             @!avatar({ initials: user.initials, size: 96 })
           @end
