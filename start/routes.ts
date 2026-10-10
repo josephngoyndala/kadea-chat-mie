@@ -24,6 +24,11 @@ router
     router.get('email/verification', [controllers.EmailVerification, 'notice'])
     router.get('email/verify/:token', [controllers.EmailVerification, 'verify'])
     router.post('email/verification/resend', [controllers.EmailVerification, 'resend'])
+
+    router.get('forgot-password', [controllers.PasswordReset, 'create'])
+    router.post('forgot-password', [controllers.PasswordReset, 'store'])
+    router.get('reset-password/:token', [controllers.PasswordReset, 'edit'])
+    router.post('reset-password/:token', [controllers.PasswordReset, 'update'])
   })
   .use(middleware.guest())
 
