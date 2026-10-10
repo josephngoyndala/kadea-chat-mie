@@ -54,7 +54,7 @@ export default class AuthTokenService {
 
   /**
    * Indique si un jeton de ce type a déjà été créé pour l'utilisateur
-   * pendant les dernières secondes (limite les renvois répétés).
+   * pendant les dernières secondes (limite les envois répétés).
    */
   async wasIssuedRecently(user: User, type: AuthTokenType, seconds: number) {
     const since = DateTime.now().minus({ seconds }).toJSDate()
@@ -69,11 +69,31 @@ export default class AuthTokenService {
   }
 
   /**
+   * Vérifie qu'un jeton est utilisable (connu, non utilisé, non expiré)
+   * sans le consommer. Sert à décider s'il faut afficher un formulaire.
+   */
+  async peek(plainToken: string, type: AuthTokenType) {
+    return this.findUsable(plainToken, type)
+  }
+
+  /**
    * Vérifie un jeton reçu dans un lien et le marque comme utilisé.
    * Renvoie l'enregistrement du jeton, ou null s'il est inconnu, déjà utilisé
    * ou expiré.
    */
   async consume(plainToken: string, type: AuthTokenType) {
+    const token = await this.findUsable(plainToken, type)
+    if (!token) {
+      return null
+    }
+
+    token.usedAt = DateTime.now()
+    await token.save()
+
+    return token
+  }
+
+  private async findUsable(plainToken: string, type: AuthTokenType) {
     const token = await AuthToken.query()
       .where('token_hash', this.hash(plainToken))
       .where('type', type)
@@ -82,9 +102,6 @@ export default class AuthTokenService {
     if (!token || token.isUsed || token.isExpired) {
       return null
     }
-
-    token.usedAt = DateTime.now()
-    await token.save()
 
     return token
   }

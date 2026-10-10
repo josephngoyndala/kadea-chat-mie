@@ -35,6 +35,23 @@ export const resendVerificationValidator = vine.create({
   email: email(),
 })
 
+/**
+ * Validateur de la demande de lien « mot de passe oublié ».
+ */
+export const forgotPasswordValidator = vine.create({
+  email: email(),
+})
+
+/**
+ * Validateur du choix d'un nouveau mot de passe.
+ */
+export const resetPasswordValidator = vine.create({
+  password: password(),
+  passwordConfirmation: vine.string().sameAs('password'),
+})
+
 signupValidator.messagesProvider = frenchMessages()
 loginValidator.messagesProvider = frenchMessages()
 resendVerificationValidator.messagesProvider = frenchMessages()
+forgotPasswordValidator.messagesProvider = frenchMessages()
+resetPasswordValidator.messagesProvider = frenchMessages()

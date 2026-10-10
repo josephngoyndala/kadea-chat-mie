@@ -39,7 +39,9 @@
         <input type="checkbox" name="remember" class="size-[18px] rounded accent-brand" />
         Se souvenir de moi
       </label>
-      <a href="#" class="font-bold text-brand hover:underline">Mot de passe oublié ?</a>
+      @link({ route: 'password_reset.create', class: 'font-bold text-brand hover:underline' })
+        Mot de passe oublié ?
+      @end
     </div>
 
     @button({ type: 'submit', block: true, 'x-bind:disabled': 'submitting' })
