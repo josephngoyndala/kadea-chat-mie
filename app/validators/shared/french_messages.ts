@@ -13,6 +13,9 @@ export function frenchMessages() {
       'minLength': 'Le champ {{ field }} doit contenir au moins {{ min }} caractères.',
       'maxLength': 'Le champ {{ field }} ne doit pas dépasser {{ max }} caractères.',
       'accepted': 'Vous devez accepter les {{ field }}.',
+      'file': 'Sélectionnez une image valide.',
+      'file.size': 'La photo est trop lourde (2 Mo maximum).',
+      'file.extname': 'La photo doit être au format JPG, PNG ou WEBP.',
       'database.unique': 'Cette valeur de {{ field }} est déjà utilisée.',
       'email.database.unique': 'Cette adresse e-mail est déjà utilisée.',
       'passwordConfirmation.sameAs': 'Les mots de passe ne correspondent pas.',
@@ -21,8 +24,10 @@ export function frenchMessages() {
       fullName: 'nom complet',
       email: 'adresse e-mail',
       password: 'mot de passe',
+      currentPassword: 'mot de passe actuel',
       passwordConfirmation: 'confirmation du mot de passe',
       acceptTerms: "conditions d'utilisation",
+      avatar: 'photo',
     }
   )
 }
