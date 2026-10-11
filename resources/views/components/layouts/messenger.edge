@@ -1,0 +1,32 @@
+@let(pageTitle = $props.get('title'))
+@let(withBottomNav = $props.get('bottomNav', false))
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#e4203d" />
+    <title>{{ pageTitle ? `${pageTitle} · Kadea Chat` : 'Kadea Chat' }}</title>
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @stack('dumper')
+  </head>
+  <body class="h-dvh overflow-hidden bg-paper">
+    <div class="flex h-dvh flex-col">
+      {{-- En-tête global : à partir de 640 px seulement --}}
+      <div class="hidden flex-none sm:block">
+        @include('partials/app_header')
+      </div>
+
+      <main class="flex min-h-0 flex-1 flex-col">{{{ await $slots.main() }}}</main>
+
+      @if(withBottomNav)
+        <div class="flex-none sm:hidden">
+          @include('partials/app_bottom_nav')
+        </div>
+      @end
+    </div>
+
+    @include('partials/photo_lightbox')
+    @include('partials/flash_alerts')
+  </body>
+</html>

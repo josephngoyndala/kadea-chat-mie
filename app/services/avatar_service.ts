@@ -5,7 +5,7 @@ import type User from '#models/user'
 
 /**
  * Gère la photo de profil : enregistrement du nouveau fichier, mise à jour
- * de l'utilisateur et suppression de l'ancienne photo.
+ * de l'utilisateur, suppression de l'ancienne photo et adresse d'affichage.
  */
 export default class AvatarService {
   /**
@@ -43,6 +43,20 @@ export default class AvatarService {
     await user.save()
 
     await this.deleteQuietly(previousKey)
+  }
+
+  /**
+   * Adresse d'affichage de la photo d'un utilisateur, ou null s'il n'en a pas.
+   */
+  async urlFor(user: User) {
+    return this.urlForKey(user.avatarPath)
+  }
+
+  /**
+   * Adresse d'affichage d'un fichier enregistré, ou null si la clé est vide.
+   */
+  async urlForKey(key: string | null) {
+    return key ? drive.use().getUrl(key) : null
   }
 
   /**

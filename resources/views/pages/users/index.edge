@@ -1,0 +1,73 @@
+@layouts.app({ title: 'Nouvelle discussion' })
+  @page({
+    title: 'Nouvelle discussion',
+    description: 'Recherchez un utilisateur par son nom ou son adresse e-mail.',
+  })
+    <div class="flex w-full min-w-0 max-w-2xl flex-col gap-4">
+
+      <form
+        method="GET"
+        action="{{ urlFor('users.index') }}"
+        role="search"
+        x-data
+        x-on:input.debounce.400ms="$el.requestSubmit()"
+      >
+        <label for="q" class="sr-only">Rechercher un utilisateur</label>
+        <div class="relative">
+          <span class="pointer-events-none absolute inset-y-0 left-0 grid w-12 place-items-center text-muted">
+            @svg('lucide:search', { width: 20, height: 20 })
+          </span>
+          <input
+            type="search"
+            id="q"
+            name="q"
+            value="{{ term }}"
+            autocomplete="off"
+            placeholder="Nom ou adresse e-mail"
+            x-init="$el.focus(); $el.setSelectionRange($el.value.length, $el.value.length)"
+            class="h-14 w-full min-w-0 rounded-field border border-line bg-white pl-12 pr-4 text-[15px] outline-none transition placeholder:text-[#8d8d8d] focus:border-brand focus:ring-4 focus:ring-brand/15"
+          />
+        </div>
+      </form>
+
+      @if(results.length)
+        <ul class="divide-y divide-line overflow-hidden rounded-3xl border border-line bg-white shadow-card">
+          @each(person in results)
+            <li class="flex items-center gap-3 p-4">
+              @if(person.avatarUrl)
+                @!avatar({ src: person.avatarUrl, name: person.name, size: 48 })
+              @else
+                @!avatar({ initials: person.initials, size: 48 })
+              @end
+
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-[15px] font-bold">{{ person.name }}</p>
+                <p class="truncate text-sm text-muted">{{ person.email }}</p>
+              </div>
+
+              @form({ route: 'conversations.store', method: 'POST', class: 'flex-none' })
+                <input type="hidden" name="userId" value="{{ person.id }}" />
+                @button({ type: 'submit', size: 'sm' })
+                  Discuter
+                @end
+              @end
+            </li>
+          @end
+        </ul>
+      @elseif(searched)
+        <div class="flex flex-col items-center gap-3 rounded-3xl border border-line bg-white px-6 py-12 text-center shadow-card">
+          <span class="grid size-14 place-items-center rounded-2xl bg-paper text-muted">
+            @svg('lucide:user-search', { width: 26, height: 26 })
+          </span>
+          <p class="text-sm text-muted">
+            Aucun utilisateur trouvé pour « {{ term }} ». Vérifiez l'orthographe, ou saisissez au moins 2 caractères.
+          </p>
+        </div>
+      @else
+        <p class="px-1 text-sm text-muted">
+          Saisissez au moins 2 caractères. Seuls les comptes dont l'adresse e-mail est confirmée apparaissent.
+        </p>
+      @end
+    </div>
+  @end
+@end

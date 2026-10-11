@@ -34,8 +34,15 @@ router
 
 router
   .group(() => {
-    router.on('/dashboard').render('pages/dashboard').as('dashboard')
     router.post('logout', [controllers.Session, 'destroy'])
+
+    router.get('dashboard', [controllers.Conversations, 'index']).as('dashboard')
+    router
+      .get('conversations/:id', [controllers.Conversations, 'show'])
+      .where('id', router.matchers.number())
+    router.post('conversations', [controllers.Conversations, 'store'])
+
+    router.get('users', [controllers.Users, 'index'])
 
     router.get('profile', [controllers.Profile, 'show'])
     router.post('profile', [controllers.Profile, 'update'])

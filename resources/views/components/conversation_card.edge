@@ -1,0 +1,27 @@
+@let(cardId = $props.get('id'))
+@let(cardTitle = $props.get('title'))
+@let(cardAvatarUrl = $props.get('avatarUrl'))
+@let(isActive = $props.get('active', false))
+
+{{-- La carte entière ouvre la discussion (lien étiré), sauf la photo, qui s'agrandit. --}}
+<li class="relative flex items-center gap-3 px-4 py-3 transition {{ isActive ? 'bg-brand-50' : 'hover:bg-paper' }}">
+  <div class="relative z-10 flex-none">
+    @if(cardAvatarUrl)
+      @!avatar({ src: cardAvatarUrl, name: cardTitle, size: 52 })
+    @else
+      @!avatar({ initials: $props.get('initials'), size: 52 })
+    @end
+  </div>
+
+  <a
+    href="{{ urlFor('conversations.show', { id: cardId }) }}"
+    aria-current="{{ isActive ? 'page' : 'false' }}"
+    class="flex min-w-0 flex-1 flex-col gap-0.5 after:absolute after:inset-0"
+  >
+    <span class="flex items-baseline justify-between gap-3">
+      <span class="truncate text-[15px] font-bold text-ink">{{ cardTitle }}</span>
+      <span class="flex-none text-xs text-muted">{{ $props.get('time') }}</span>
+    </span>
+    <span class="truncate text-sm text-muted">{{ $props.get('preview') }}</span>
+  </a>
+</li>

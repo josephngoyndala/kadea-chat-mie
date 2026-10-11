@@ -9,6 +9,8 @@ export function frenchMessages() {
     {
       'required': 'Le champ {{ field }} est obligatoire.',
       'string': 'Le champ {{ field }} doit être un texte.',
+      'number': 'La valeur du champ {{ field }} est invalide.',
+      'positive': 'La valeur du champ {{ field }} est invalide.',
       'email': 'Saisissez une adresse e-mail valide.',
       'minLength': 'Le champ {{ field }} doit contenir au moins {{ min }} caractères.',
       'maxLength': 'Le champ {{ field }} ne doit pas dépasser {{ max }} caractères.',
@@ -28,6 +30,8 @@ export function frenchMessages() {
       passwordConfirmation: 'confirmation du mot de passe',
       acceptTerms: "conditions d'utilisation",
       avatar: 'photo',
+      userId: 'utilisateur',
+      q: 'recherche',
     }
   )
 }

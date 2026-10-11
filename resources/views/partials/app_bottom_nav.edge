@@ -1,0 +1,10 @@
+<nav class="flex border-t border-line bg-white pb-[env(safe-area-inset-bottom)]" aria-label="Navigation principale">
+  @navLink({ route: 'dashboard', class: 'flex flex-1 flex-col items-center gap-1 py-2.5 text-xs font-semibold text-muted transition aria-[current=page]:text-brand' })
+    @svg('lucide:messages-square', { width: 22, height: 22 })
+    Discussions
+  @end
+  @navLink({ route: 'profile.show', class: 'flex flex-1 flex-col items-center gap-1 py-2.5 text-xs font-semibold text-muted transition aria-[current=page]:text-brand' })
+    @svg('lucide:user-round', { width: 22, height: 22 })
+    Profil
+  @end
+</nav>
