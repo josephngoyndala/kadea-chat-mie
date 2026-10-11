@@ -13,16 +13,14 @@
         <p class="mt-1 text-sm text-muted">Image JPG, PNG ou WEBP, 2 Mo maximum.</p>
 
         <div class="mt-6 flex flex-col items-center gap-6 sm:flex-row sm:items-center">
-          @if(avatarUrl)
-            <div class="flex flex-col items-center gap-2">
-              @photoViewer({ src: avatarUrl, alt: user.fullName ?? 'Photo de profil' })
-                @!avatar({ src: avatarUrl, name: user.fullName, size: 96 })
-              @end
+          <div class="flex flex-col items-center gap-2">
+            @if(avatarUrl)
+              @!avatar({ src: avatarUrl, name: user.fullName, size: 96 })
               <span class="text-xs text-muted">Appuyez pour agrandir</span>
-            </div>
-          @else
-            @!avatar({ initials: user.initials, size: 96 })
-          @end
+            @else
+              @!avatar({ initials: user.initials, size: 96 })
+            @end
+          </div>
 
           <div class="flex w-full min-w-0 flex-1 flex-col gap-3">
             @form({

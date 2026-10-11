@@ -1,5 +1,8 @@
 @let(nameInitials = $props.get('initials'))
+@let(photo = $props.get('src'))
 @let(size = $props.get('size', 44))
+@let(zoom = $props.get('zoom', true))
+@let(label = $props.get('name') ?? 'Photo')
 @let(tones = {
   brand: 'bg-brand text-white',
   light: 'bg-[#e4e4e4] text-ink',
@@ -8,17 +11,32 @@
 @let(classes = ['grid shrink-0 place-items-center rounded-full object-cover font-bold', tones[$props.get('tone', 'brand')]])
 @let(boxStyle = `width: ${size}px; height: ${size}px; font-size: ${Math.round(size * 0.36)}px;`)
 
-@if($props.get('src'))
+@if(photo && zoom)
+  <button
+    type="button"
+    data-zoom-src="{{ photo }}"
+    data-zoom-alt="{{ label }}"
+    aria-label="Agrandir la photo de {{ label }}"
+    class="shrink-0 cursor-zoom-in rounded-full transition active:scale-95"
+  >
+    <img {{
+      $props
+        .except(['initials', 'name', 'size', 'tone', 'zoom'])
+        .merge({ class: classes, style: boxStyle, alt: label })
+        .toAttrs()
+    }} />
+  </button>
+@elseif(photo)
   <img {{
     $props
-      .except(['initials', 'name', 'size', 'tone'])
-      .merge({ class: classes, style: boxStyle, alt: $props.get('name') ?? '' })
+      .except(['initials', 'name', 'size', 'tone', 'zoom'])
+      .merge({ class: classes, style: boxStyle, alt: label })
       .toAttrs()
   }} />
 @elseif(nameInitials)
   <span {{
     $props
-      .except(['initials', 'name', 'src', 'size', 'tone'])
+      .except(['initials', 'name', 'src', 'size', 'tone', 'zoom'])
       .merge({ class: classes, style: boxStyle })
       .toAttrs()
   }}>
