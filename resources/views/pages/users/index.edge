@@ -1,7 +1,7 @@
 @layouts.app({ title: 'Nouvelle discussion' })
   @page({
     title: 'Nouvelle discussion',
-    description: 'Recherchez un utilisateur par son nom ou son adresse e-mail.',
+    description: 'Parcourez les membres ou recherchez par nom ou adresse e-mail.',
   })
     <div class="flex w-full min-w-0 max-w-2xl flex-col gap-4">
 
@@ -30,9 +30,13 @@
         </div>
       </form>
 
-      @if(results.length)
+      @if(members.length)
+        <p class="px-1 text-sm font-semibold text-muted">
+          {{ searched ? `${total} résultat${total > 1 ? 's' : ''}` : `${total} membre${total > 1 ? 's' : ''}` }}
+        </p>
+
         <ul class="divide-y divide-line overflow-hidden rounded-3xl border border-line bg-white shadow-card">
-          @each(person in results)
+          @each(person in members)
             <li class="flex items-center gap-3 p-4">
               @if(person.avatarUrl)
                 @!avatar({ src: person.avatarUrl, name: person.name, size: 48 })
@@ -42,7 +46,8 @@
 
               <div class="min-w-0 flex-1">
                 <p class="truncate text-[15px] font-bold">{{ person.name }}</p>
-                <p class="truncate text-sm text-muted">{{ person.email }}</p>
+                <p class="truncate text-sm text-muted">{{ person.maskedEmail }}</p>
+                <p class="truncate text-xs text-muted">Inscrit le {{ person.joinedOn }}</p>
               </div>
 
               @form({ route: 'conversations.store', method: 'POST', class: 'flex-none' })
@@ -54,19 +59,44 @@
             </li>
           @end
         </ul>
+
+        @if(previousUrl || nextUrl)
+          <nav class="flex items-center justify-between gap-3" aria-label="Pagination">
+            @if(previousUrl)
+              @button({ href: previousUrl, variant: 'secondary', size: 'sm' })
+                @svg('lucide:chevron-left', { width: 16, height: 16 })
+                Précédent
+              @end
+            @else
+              <span></span>
+            @end
+
+            @if(nextUrl)
+              @button({ href: nextUrl, variant: 'secondary', size: 'sm' })
+                Suivant
+                @svg('lucide:chevron-right', { width: 16, height: 16 })
+              @end
+            @end
+          </nav>
+        @end
       @elseif(searched)
         <div class="flex flex-col items-center gap-3 rounded-3xl border border-line bg-white px-6 py-12 text-center shadow-card">
           <span class="grid size-14 place-items-center rounded-2xl bg-paper text-muted">
             @svg('lucide:user-search', { width: 26, height: 26 })
           </span>
           <p class="text-sm text-muted">
-            Aucun utilisateur trouvé pour « {{ term }} ». Vérifiez l'orthographe, ou saisissez au moins 2 caractères.
+            Aucun membre trouvé pour « {{ term }} ». Essayez avec un seul mot, ou une partie du nom.
           </p>
         </div>
       @else
-        <p class="px-1 text-sm text-muted">
-          Saisissez au moins 2 caractères. Seuls les comptes dont l'adresse e-mail est confirmée apparaissent.
-        </p>
+        <div class="flex flex-col items-center gap-3 rounded-3xl border border-line bg-white px-6 py-12 text-center shadow-card">
+          <span class="grid size-14 place-items-center rounded-2xl bg-brand-50 text-brand">
+            @svg('lucide:users', { width: 26, height: 26 })
+          </span>
+          <p class="text-sm text-muted">
+            Vous êtes pour l'instant le seul membre confirmé. Invitez vos camarades à créer leur compte !
+          </p>
+        </div>
       @end
     </div>
   @end

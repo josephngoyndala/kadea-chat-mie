@@ -65,6 +65,13 @@ export function formatDayLabel(date: DateTime) {
 }
 
 /**
+ * Date courte et lisible : « 12 oct. 2026 ».
+ */
+export function formatShortDate(date: DateTime) {
+  return local(date).toFormat('d LLL yyyy')
+}
+
+/**
  * Clé de regroupement par jour (dans le fuseau de l'application).
  */
 export function dayKey(date: DateTime) {
