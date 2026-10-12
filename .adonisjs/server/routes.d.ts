@@ -17,8 +17,11 @@ export type ScannedRoutes = {
     'password_reset.store': { paramsTuple?: []; params?: {} }
     'password_reset.edit': { paramsTuple: [ParamValue]; params: {'token': ParamValue} }
     'password_reset.update': { paramsTuple: [ParamValue]; params: {'token': ParamValue} }
-    'dashboard': { paramsTuple?: []; params?: {} }
     'session.destroy': { paramsTuple?: []; params?: {} }
+    'dashboard': { paramsTuple?: []; params?: {} }
+    'conversations.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'conversations.store': { paramsTuple?: []; params?: {} }
+    'users.index': { paramsTuple?: []; params?: {} }
     'profile.show': { paramsTuple?: []; params?: {} }
     'profile.update': { paramsTuple?: []; params?: {} }
     'profile.update_avatar': { paramsTuple?: []; params?: {} }
@@ -35,6 +38,8 @@ export type ScannedRoutes = {
     'password_reset.create': { paramsTuple?: []; params?: {} }
     'password_reset.edit': { paramsTuple: [ParamValue]; params: {'token': ParamValue} }
     'dashboard': { paramsTuple?: []; params?: {} }
+    'conversations.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'users.index': { paramsTuple?: []; params?: {} }
     'profile.show': { paramsTuple?: []; params?: {} }
   }
   HEAD: {
@@ -47,6 +52,8 @@ export type ScannedRoutes = {
     'password_reset.create': { paramsTuple?: []; params?: {} }
     'password_reset.edit': { paramsTuple: [ParamValue]; params: {'token': ParamValue} }
     'dashboard': { paramsTuple?: []; params?: {} }
+    'conversations.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'users.index': { paramsTuple?: []; params?: {} }
     'profile.show': { paramsTuple?: []; params?: {} }
   }
   POST: {
@@ -56,6 +63,7 @@ export type ScannedRoutes = {
     'password_reset.store': { paramsTuple?: []; params?: {} }
     'password_reset.update': { paramsTuple: [ParamValue]; params: {'token': ParamValue} }
     'session.destroy': { paramsTuple?: []; params?: {} }
+    'conversations.store': { paramsTuple?: []; params?: {} }
     'profile.update': { paramsTuple?: []; params?: {} }
     'profile.update_avatar': { paramsTuple?: []; params?: {} }
     'profile.destroy_avatar': { paramsTuple?: []; params?: {} }

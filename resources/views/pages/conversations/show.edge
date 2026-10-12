@@ -1,0 +1,71 @@
+@layouts.messenger({ title: header.title })
+  <div class="flex min-h-0 flex-1">
+    {{-- Liste : visible à côté de la discussion à partir de 1024 px --}}
+    <aside class="hidden min-h-0 w-[380px] flex-none flex-col border-r border-line lg:flex">
+      @include('partials/conversation_list')
+    </aside>
+
+    <section class="flex min-h-0 min-w-0 flex-1 flex-col bg-paper">
+      <header class="flex flex-none items-center gap-3 border-b border-line bg-white px-3 py-3 sm:px-4">
+        <a
+          href="{{ urlFor('dashboard') }}"
+          aria-label="Retour aux discussions"
+          class="grid size-11 flex-none place-items-center rounded-full text-ink transition hover:bg-paper lg:hidden"
+        >
+          @svg('lucide:arrow-left', { width: 22, height: 22 })
+        </a>
+
+        @if(header.avatarUrl)
+          @!avatar({ src: header.avatarUrl, name: header.title, size: 44 })
+        @else
+          @!avatar({ initials: header.initials, size: 44 })
+        @end
+
+        <div class="min-w-0 flex-1">
+          <h1 class="truncate text-base font-bold tracking-tight">{{ header.title }}</h1>
+        </div>
+      </header>
+
+      <div
+        class="min-h-0 flex-1 overflow-y-auto px-4 py-4"
+        x-data
+        x-init="$nextTick(() => { $el.scrollTop = $el.scrollHeight })"
+      >
+        @if(groups.length)
+          <div class="flex flex-col gap-2">
+            @each(group in groups)
+              <p class="mx-auto my-3 rounded-full bg-white px-3 py-1 text-xs font-semibold text-muted shadow-card">
+                {{ group.label }}
+              </p>
+
+              @each(message in group.messages)
+                <div class="flex {{ message.isMine ? 'justify-end' : 'justify-start' }}">
+                  <div class="max-w-[85%] rounded-2xl px-4 py-2.5 sm:max-w-[70%] {{ message.isMine ? 'rounded-br-md bg-brand text-white' : 'rounded-bl-md bg-white text-ink shadow-card' }}">
+                    @if(message.isDeleted)
+                      <p class="flex items-center gap-1.5 text-sm italic opacity-70">
+                        @svg('lucide:ban', { width: 14, height: 14 })
+                        Ce message a été supprimé
+                      </p>
+                    @else
+                      <p class="whitespace-pre-wrap text-[15px] leading-relaxed [overflow-wrap:anywhere]">{{ message.body }}</p>
+                    @end
+                    <p class="mt-1 text-right text-[11px] {{ message.isMine ? 'text-white/70' : 'text-muted' }}">{{ message.time }}</p>
+                  </div>
+                </div>
+              @end
+            @end
+          </div>
+        @else
+          <div class="flex h-full flex-col items-center justify-center gap-3 text-center">
+            <span class="grid size-16 place-items-center rounded-2xl bg-white text-brand shadow-card">
+              @svg('lucide:hand-heart', { width: 28, height: 28 })
+            </span>
+            <p class="max-w-xs text-sm text-muted">
+              Aucun message pour l'instant. Dites bonjour à {{ header.title }} !
+            </p>
+          </div>
+        @end
+      </div>
+    </section>
+  </div>
+@end
