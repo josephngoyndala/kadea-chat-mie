@@ -7,9 +7,18 @@
 |
 */
 
+import transmit from '@adonisjs/transmit/services/main'
 import { middleware } from '#start/kernel'
 import { controllers } from '#generated/controllers'
 import router from '@adonisjs/core/services/router'
+
+/**
+ * Routes du temps réel (connexion, abonnement, désabonnement) : réservées
+ * aux utilisateurs connectés.
+ */
+transmit.registerRoutes((route) => {
+  route.middleware(middleware.auth())
+})
 
 router.on('/').render('pages/home').as('home')
 
@@ -40,8 +49,18 @@ router
     router
       .get('conversations/:id', [controllers.Conversations, 'show'])
       .where('id', router.matchers.number())
+    router
+      .get('conversations/:id/card', [controllers.Conversations, 'card'])
+      .where('id', router.matchers.number())
     router.post('conversations', [controllers.Conversations, 'store'])
 
+    router
+      .get('conversations/:conversationId/messages', [controllers.Messages, 'index'])
+      .where('conversationId', router.matchers.number())
+    router
+      .get('conversations/:conversationId/messages/:messageId', [controllers.Messages, 'show'])
+      .where('conversationId', router.matchers.number())
+      .where('messageId', router.matchers.number())
     router
       .post('conversations/:conversationId/messages', [controllers.Messages, 'store'])
       .where('conversationId', router.matchers.number())

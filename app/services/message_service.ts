@@ -5,7 +5,11 @@ import Message from '#models/message'
 import MessageDeletion from '#models/message_deletion'
 import type User from '#models/user'
 import { dayKey } from '#services/date_formatter'
-import { EDIT_WINDOW_MINUTES, isWithinEditWindow } from '#services/message_rules'
+import {
+  EDIT_WINDOW_MINUTES,
+  NOT_HIDDEN_FOR_USER,
+  isWithinEditWindow,
+} from '#services/message_rules'
 
 /**
  * Levée quand un message ne peut pas (ou plus) être modifié.
@@ -13,7 +17,7 @@ import { EDIT_WINDOW_MINUTES, isWithinEditWindow } from '#services/message_rules
 export class MessageNotEditableError extends Error {}
 
 /**
- * Règles métier des messages : envoi, modification et suppression.
+ * Règles métier des messages : envoi, lecture, modification et suppression.
  */
 export default class MessageService {
   /**
@@ -42,6 +46,61 @@ export default class MessageService {
         message,
         startsNewDay: !previous || dayKey(previous.createdAt) !== dayKey(message.createdAt),
       }
+    })
+  }
+
+  /**
+   * Un message de la conversation, à condition que l'utilisateur ne l'ait
+   * pas masqué. Sinon la recherche échoue et l'application répond
+   * « introuvable ».
+   */
+  async findVisible(user: User, conversationId: number, messageId: number) {
+    return Message.query()
+      .where('id', messageId)
+      .where('conversation_id', conversationId)
+      .whereRaw(NOT_HIDDEN_FOR_USER, [user.id])
+      .firstOrFail()
+  }
+
+  /**
+   * Indique si ce message ouvre une nouvelle journée dans sa conversation.
+   */
+  async startsNewDay(message: Message) {
+    const previous = await Message.query()
+      .where('conversation_id', message.conversationId)
+      .where('id', '<', message.id)
+      .orderBy('id', 'desc')
+      .first()
+
+    return !previous || dayKey(previous.createdAt) !== dayKey(message.createdAt)
+  }
+
+  /**
+   * Messages visibles envoyés après un identifiant donné : sert à rattraper
+   * les messages manqués après une coupure de connexion.
+   */
+  async listAfter(user: User, conversationId: number, afterId: number) {
+    const messages = await Message.query()
+      .where('conversation_id', conversationId)
+      .where('id', '>', afterId)
+      .whereRaw(NOT_HIDDEN_FOR_USER, [user.id])
+      .orderBy('id', 'asc')
+      .limit(100)
+
+    let previous: Message | null =
+      messages.length > 0
+        ? await Message.query()
+            .where('conversation_id', conversationId)
+            .where('id', '<', messages[0].id)
+            .orderBy('id', 'desc')
+            .first()
+        : null
+
+    return messages.map((message) => {
+      const startsNewDay = !previous || dayKey(previous.createdAt) !== dayKey(message.createdAt)
+      previous = message
+
+      return { message, startsNewDay }
     })
   }
 

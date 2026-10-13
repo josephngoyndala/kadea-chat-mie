@@ -17,5 +17,14 @@ export const deleteMessageValidator = vine.create({
   scope: vine.enum(['me', 'everyone']),
 })
 
+/**
+ * Validateur du rattrapage des messages manqués : identifiant du dernier
+ * message déjà affiché.
+ */
+export const catchUpValidator = vine.create({
+  after: vine.number().min(0).optional(),
+})
+
 sendMessageValidator.messagesProvider = frenchMessages()
 deleteMessageValidator.messagesProvider = frenchMessages()
+catchUpValidator.messagesProvider = frenchMessages()

@@ -9,6 +9,9 @@
       class="flex min-h-0 min-w-0 flex-1 flex-col bg-paper"
       x-data="conversationChat"
       x-on:submit="handleSubmit($event)"
+      data-conversation-id="{{ activeId }}"
+      data-message-url="{{ urlFor('messages.show', { conversationId: activeId, messageId: '0' }) }}"
+      data-catch-up-url="{{ urlFor('messages.index', { conversationId: activeId }) }}"
     >
       <header class="flex flex-none items-center gap-3 border-b border-line bg-white px-3 py-3 sm:px-4">
         <a
@@ -31,32 +34,61 @@
       </header>
 
       {{-- Messages --}}
-      <div x-ref="list" class="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4">
-        @if(!groups.length)
-          <div data-empty class="my-auto flex flex-col items-center gap-3 text-center">
-            <span class="grid size-16 place-items-center rounded-2xl bg-white text-brand shadow-card">
-              @svg('lucide:hand-heart', { width: 28, height: 28 })
-            </span>
-            <p class="max-w-xs text-sm text-muted">
-              Aucun message pour l'instant. Dites bonjour à {{ header.title }} !
-            </p>
-          </div>
-        @end
-
-        <div x-ref="messages" class="flex flex-col gap-2">
-          @each(group in groups)
-            <p class="mx-auto my-3 w-fit rounded-full bg-white px-3 py-1 text-xs font-semibold text-muted shadow-card">
-              {{ group.label }}
-            </p>
-            @each(message in group.messages)
-              @!messageBubble({ message: message, conversationId: activeId })
-            @end
+      <div class="relative flex min-h-0 flex-1 flex-col">
+        <div
+          x-ref="list"
+          x-on:scroll.passive="onScroll()"
+          class="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4"
+        >
+          @if(!groups.length)
+            <div data-empty class="my-auto flex flex-col items-center gap-3 text-center">
+              <span class="grid size-16 place-items-center rounded-2xl bg-white text-brand shadow-card">
+                @svg('lucide:hand-heart', { width: 28, height: 28 })
+              </span>
+              <p class="max-w-xs text-sm text-muted">
+                Aucun message pour l'instant. Dites bonjour à {{ header.title }} !
+              </p>
+            </div>
           @end
+
+          <div x-ref="messages" class="flex flex-col gap-2">
+            @each(group in groups)
+              <p data-day-label class="mx-auto my-3 w-fit rounded-full bg-white px-3 py-1 text-xs font-semibold text-muted shadow-card">
+                {{ group.label }}
+              </p>
+              @each(message in group.messages)
+                @!messageBubble({ message: message, conversationId: activeId })
+              @end
+            @end
+          </div>
         </div>
+
+        {{-- Nouveaux messages pendant que l'on lit plus haut --}}
+        <button
+          type="button"
+          x-show="unseen > 0"
+          x-cloak
+          x-transition
+          x-on:click="scrollToBottom()"
+          class="absolute bottom-3 left-1/2 inline-flex -translate-x-1/2 cursor-pointer items-center gap-2 rounded-full bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-card"
+        >
+          @svg('lucide:arrow-down', { width: 16, height: 16 })
+          <span x-text="unseen > 1 ? unseen + ' nouveaux messages' : '1 nouveau message'"></span>
+        </button>
       </div>
 
       {{-- Saisie --}}
       <div class="flex-none border-t border-line bg-white">
+        <p
+          x-show="offline"
+          x-cloak
+          role="status"
+          class="flex items-center gap-2 bg-brand-50 px-4 py-2 text-sm font-medium text-brand"
+        >
+          @svg('lucide:loader-circle', { width: 16, height: 16, class: 'animate-spin' })
+          Connexion perdue, reconnexion en cours…
+        </p>
+
         <p x-show="error" x-cloak x-text="error" role="alert" class="px-4 pt-3 text-sm font-medium text-brand"></p>
 
         @form({

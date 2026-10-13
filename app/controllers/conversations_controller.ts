@@ -46,6 +46,23 @@ export default class ConversationsController {
   }
 
   /**
+   * Renvoie la carte d'une conversation (morceau de HTML) pour rafraîchir la
+   * liste en temps réel
+   */
+  async card({ auth, params, request, view }: HttpContext) {
+    const user = auth.getUserOrFail()
+
+    const conversation = await this.conversations.findForMember(user, Number(params.id))
+    const lastMessage = await this.conversations.lastMessageOf(conversation, user)
+    const [item] = await this.presenter.cards([{ conversation, lastMessage }], user)
+
+    return view.render('fragments/conversation_card', {
+      item,
+      active: item.id === Number(request.input('active')),
+    })
+  }
+
+  /**
    * Démarre une conversation privée (ou ouvre celle qui existe déjà)
    */
   async store({ auth, request, response, session }: HttpContext) {
