@@ -1,0 +1,139 @@
+@let(message = $props.get('message'))
+@let(conversationId = $props.get('conversationId'))
+@let(actionParams = { conversationId: conversationId, messageId: message.id })
+
+<div
+  id="message-{{ message.id }}"
+  data-message-id="{{ message.id }}"
+  x-data="messageBubble"
+  x-on:keydown.escape="close()"
+  class="flex {{ message.isMine ? 'justify-end' : 'justify-start' }}"
+>
+  <div class="flex max-w-[85%] flex-col sm:max-w-[70%] {{ message.isMine ? 'items-end' : 'items-start' }}">
+
+    {{-- La bulle : un appui ouvre le menu d'actions --}}
+    <div
+      x-show="mode !== 'edit'"
+      role="button"
+      tabindex="0"
+      x-on:click="toggle()"
+      x-on:keydown.enter="toggle()"
+      class="cursor-pointer rounded-2xl px-4 py-2.5 {{ message.isDeleted ? 'border border-dashed border-line text-muted' : (message.isMine ? 'rounded-br-md bg-brand text-white' : 'rounded-bl-md bg-white text-ink shadow-card') }}"
+    >
+      @if(message.isDeleted)
+        <p class="flex items-center gap-1.5 text-sm italic">
+          @svg('lucide:ban', { width: 14, height: 14 })
+          Ce message a été supprimé
+        </p>
+      @else
+        <p class="whitespace-pre-wrap text-[15px] leading-relaxed [overflow-wrap:anywhere]">{{ message.body }}</p>
+      @end
+      <p class="mt-1 text-right text-[11px] {{ message.isDeleted ? 'text-muted' : (message.isMine ? 'text-white/70' : 'text-muted') }}">{{ message.isEdited ? 'modifié · ' : '' }}{{ message.time }}</p>
+    </div>
+
+    {{-- Éditeur : remplace la bulle pendant la modification --}}
+    @if(message.canEdit)
+      <div x-show="mode === 'edit'" x-cloak class="w-[min(80vw,28rem)]">
+        @form({
+          route: 'messages.update',
+          routeParams: actionParams,
+          method: 'POST',
+          class: 'flex flex-col gap-2',
+          'data-message-edit': true,
+        })
+          <label for="edit-{{ message.id }}" class="sr-only">Modifier le message</label>
+          <textarea
+            id="edit-{{ message.id }}"
+            name="body"
+            rows="2"
+            maxlength="2000"
+            required
+            x-ref="editField"
+            x-on:keydown.escape.stop="cancelEdit()"
+            class="w-full resize-none rounded-2xl border border-brand bg-white px-4 py-3 text-[15px] leading-6 outline-none ring-4 ring-brand/15"
+          >{{ message.body }}</textarea>
+          <div class="flex justify-end gap-2">
+            <button
+              type="button"
+              x-on:click="cancelEdit()"
+              class="inline-flex min-h-11 cursor-pointer items-center rounded-xl px-4 text-sm font-semibold text-muted transition hover:bg-white"
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              class="inline-flex min-h-11 cursor-pointer items-center rounded-xl bg-brand px-4 text-sm font-semibold text-white"
+            >
+              Enregistrer
+            </button>
+          </div>
+        @end
+      </div>
+    @end
+
+    {{-- Menu d'actions --}}
+    <div x-show="menu && mode === 'actions'" x-cloak x-transition class="mt-1.5 flex flex-wrap items-center gap-1">
+      @if(message.canEdit)
+        <button
+          type="button"
+          x-on:click="startEdit()"
+          class="inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-muted transition hover:bg-white hover:text-ink"
+        >
+          @svg('lucide:pencil', { width: 15, height: 15 })
+          Modifier
+        </button>
+      @end
+      <button
+        type="button"
+        x-on:click="mode = 'delete'"
+        class="inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-muted transition hover:bg-white hover:text-brand"
+      >
+        @svg('lucide:trash-2', { width: 15, height: 15 })
+        Supprimer
+      </button>
+    </div>
+
+    {{-- Choix du type de suppression --}}
+    <div x-show="menu && mode === 'delete'" x-cloak x-transition class="mt-1.5 flex flex-wrap items-center gap-1">
+      @form({
+        route: 'messages.destroy',
+        routeParams: actionParams,
+        method: 'POST',
+        'data-message-delete': 'me',
+      })
+        <input type="hidden" name="scope" value="me" />
+        <button
+          type="submit"
+          class="inline-flex min-h-11 cursor-pointer items-center rounded-xl px-3 text-sm font-semibold text-muted transition hover:bg-white hover:text-brand"
+        >
+          Pour moi
+        </button>
+      @end
+
+      @if(message.canDeleteForEveryone)
+        @form({
+          route: 'messages.destroy',
+          routeParams: actionParams,
+          method: 'POST',
+          'data-message-delete': 'everyone',
+        })
+          <input type="hidden" name="scope" value="everyone" />
+          <button
+            type="submit"
+            class="inline-flex min-h-11 cursor-pointer items-center rounded-xl bg-brand px-4 text-sm font-semibold text-white"
+          >
+            Pour tous
+          </button>
+        @end
+      @end
+
+      <button
+        type="button"
+        x-on:click="mode = 'actions'"
+        class="inline-flex min-h-11 cursor-pointer items-center rounded-xl px-3 text-sm font-semibold text-muted transition hover:bg-white"
+      >
+        Retour
+      </button>
+    </div>
+  </div>
+</div>

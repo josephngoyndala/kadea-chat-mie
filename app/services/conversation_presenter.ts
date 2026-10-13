@@ -4,6 +4,7 @@ import type User from '#models/user'
 import AvatarService from '#services/avatar_service'
 import type { ConversationWithLastMessage } from '#services/conversation_service'
 import { dayKey, formatDayLabel, formatListDate, formatMessageTime } from '#services/date_formatter'
+import { isWithinEditWindow } from '#services/message_rules'
 
 export type ConversationCard = {
   id: number
@@ -25,6 +26,9 @@ export type MessageBubble = {
   body: string
   isMine: boolean
   isDeleted: boolean
+  isEdited: boolean
+  canEdit: boolean
+  canDeleteForEveryone: boolean
   time: string
 }
 
@@ -66,6 +70,38 @@ export default class ConversationPresenter {
   }
 
   /**
+   * Une bulle de message, avec les actions que l'utilisateur peut faire
+   * dessus. C'est le serveur qui fait respecter ces règles : l'interface ne
+   * fait que cacher les boutons non permis.
+   */
+  bubble(message: Message, viewer: User): MessageBubble {
+    const isDeleted = Boolean(message.deletedAt)
+    const isMine = message.senderId === viewer.id
+
+    return {
+      id: message.id,
+      body: isDeleted ? '' : (message.body ?? ''),
+      isMine,
+      isDeleted,
+      isEdited: Boolean(message.editedAt) && !isDeleted,
+      canEdit: isMine && !isDeleted && isWithinEditWindow(message.createdAt),
+      canDeleteForEveryone: isMine && !isDeleted,
+      time: formatMessageTime(message.createdAt),
+    }
+  }
+
+  /**
+   * Données du morceau de HTML renvoyé après une action sur un message : la
+   * bulle et, si c'est le premier message du jour, l'intitulé du jour.
+   */
+  fragment(message: Message, viewer: User, startsNewDay: boolean) {
+    return {
+      message: this.bubble(message, viewer),
+      dayLabel: startsNewDay ? formatDayLabel(message.createdAt) : null,
+    }
+  }
+
+  /**
    * Messages regroupés par jour, avec un intitulé pour chaque jour.
    */
   groupMessages(messages: Message[], viewer: User): MessageGroup[] {
@@ -80,14 +116,7 @@ export default class ConversationPresenter {
         currentDay = day
       }
 
-      const isDeleted = Boolean(message.deletedAt)
-      groups[groups.length - 1].messages.push({
-        id: message.id,
-        body: isDeleted ? '' : (message.body ?? ''),
-        isMine: message.senderId === viewer.id,
-        isDeleted,
-        time: formatMessageTime(message.createdAt),
-      })
+      groups[groups.length - 1].messages.push(this.bubble(message, viewer))
     }
 
     return groups
