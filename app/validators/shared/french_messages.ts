@@ -32,6 +32,7 @@ export function frenchMessages() {
       avatar: 'photo',
       userId: 'utilisateur',
       q: 'recherche',
+      body: 'message',
     }
   )
 }

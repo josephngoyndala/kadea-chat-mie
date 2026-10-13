@@ -1,0 +1,69 @@
+@let(message = $props.get('message'))
+@let(conversationId = $props.get('conversationId'))
+@let(deleteParams = { conversationId: conversationId, messageId: message.id })
+
+<div
+  id="message-{{ message.id }}"
+  data-message-id="{{ message.id }}"
+  data-can-delete="{{ message.canDelete ? 'true' : 'false' }}"
+  x-data="messageBubble"
+  class="flex {{ message.isMine ? 'justify-end' : 'justify-start' }}"
+>
+  <div class="flex max-w-[85%] flex-col sm:max-w-[70%] {{ message.isMine ? 'items-end' : 'items-start' }}">
+    <div
+      x-on:click="toggle()"
+      x-on:keydown.enter="toggle()"
+      x-bind:tabindex="canDelete ? 0 : null"
+      class="rounded-2xl px-4 py-2.5 {{ message.canDelete ? 'cursor-pointer' : '' }} {{ message.isDeleted ? 'border border-dashed border-line text-muted' : (message.isMine ? 'rounded-br-md bg-brand text-white' : 'rounded-bl-md bg-white text-ink shadow-card') }}"
+    >
+      @if(message.isDeleted)
+        <p class="flex items-center gap-1.5 text-sm italic">
+          @svg('lucide:ban', { width: 14, height: 14 })
+          Ce message a été supprimé
+        </p>
+      @else
+        <p class="whitespace-pre-wrap text-[15px] leading-relaxed [overflow-wrap:anywhere]">{{ message.body }}</p>
+      @end
+      <p class="mt-1 text-right text-[11px] {{ message.isDeleted ? 'text-muted' : (message.isMine ? 'text-white/70' : 'text-muted') }}">{{ message.time }}</p>
+    </div>
+
+    @if(message.canDelete)
+      <div x-show="menu" x-cloak x-transition class="mt-1.5">
+        @form({
+          route: 'messages.destroy',
+          routeParams: deleteParams,
+          method: 'POST',
+          class: 'flex items-center gap-2',
+          'data-message-delete': true,
+        })
+          <button
+            type="button"
+            x-show="!confirming"
+            x-on:click="confirming = true"
+            class="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-muted transition hover:bg-white hover:text-brand"
+          >
+            @svg('lucide:trash-2', { width: 15, height: 15 })
+            Supprimer
+          </button>
+          <button
+            type="submit"
+            x-show="confirming"
+            x-cloak
+            class="inline-flex min-h-11 cursor-pointer items-center rounded-xl bg-brand px-4 text-sm font-semibold text-white"
+          >
+            Confirmer
+          </button>
+          <button
+            type="button"
+            x-show="confirming"
+            x-cloak
+            x-on:click="confirming = false; menu = false"
+            class="inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold text-muted transition hover:bg-white"
+          >
+            Annuler
+          </button>
+        @end
+      </div>
+    @end
+  </div>
+</div>

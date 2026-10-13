@@ -21,6 +21,8 @@ export type ScannedRoutes = {
     'dashboard': { paramsTuple?: []; params?: {} }
     'conversations.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'conversations.store': { paramsTuple?: []; params?: {} }
+    'messages.store': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
+    'messages.destroy': { paramsTuple: [ParamValue,ParamValue]; params: {'conversationId': ParamValue,'messageId': ParamValue} }
     'users.index': { paramsTuple?: []; params?: {} }
     'profile.show': { paramsTuple?: []; params?: {} }
     'profile.update': { paramsTuple?: []; params?: {} }
@@ -64,6 +66,8 @@ export type ScannedRoutes = {
     'password_reset.update': { paramsTuple: [ParamValue]; params: {'token': ParamValue} }
     'session.destroy': { paramsTuple?: []; params?: {} }
     'conversations.store': { paramsTuple?: []; params?: {} }
+    'messages.store': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
+    'messages.destroy': { paramsTuple: [ParamValue,ParamValue]; params: {'conversationId': ParamValue,'messageId': ParamValue} }
     'profile.update': { paramsTuple?: []; params?: {} }
     'profile.update_avatar': { paramsTuple?: []; params?: {} }
     'profile.destroy_avatar': { paramsTuple?: []; params?: {} }

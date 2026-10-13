@@ -66,4 +66,149 @@ document.addEventListener('click', (event) => {
   )
 })
 
+/**
+ * Appel au serveur utilisé par la messagerie : le serveur répond par le
+ * morceau de HTML à insérer dans la page.
+ */
+function postToServer(form) {
+  return fetch(form.action, {
+    method: 'POST',
+    headers: { 'X-Chat-Fetch': '1', Accept: 'application/json' },
+    body: new URLSearchParams(new FormData(form)),
+  })
+}
+
+/**
+ * Une bulle de message : un appui sur ses propres messages ouvre le menu de
+ * suppression (avec une confirmation).
+ */
+Alpine.data('messageBubble', function () {
+  return {
+    menu: false,
+    confirming: false,
+    canDelete: false,
+
+    init() {
+      this.canDelete = this.$el.dataset.canDelete === 'true'
+    },
+
+    toggle() {
+      if (!this.canDelete) {
+        return
+      }
+      this.menu = !this.menu
+      this.confirming = false
+    },
+  }
+})
+
+/**
+ * Une conversation ouverte : champ de saisie, envoi sans recharger la page,
+ * défilement vers le dernier message et suppression d'un message.
+ */
+Alpine.data('conversationChat', function () {
+  return {
+    draft: '',
+    sending: false,
+    error: '',
+
+    init() {
+      this.$nextTick(() => this.scrollToBottom(false))
+    },
+
+    get canSend() {
+      return this.draft.trim().length > 0 && !this.sending
+    },
+
+    scrollToBottom(smooth = true) {
+      const list = this.$refs.list
+      list.scrollTo({ top: list.scrollHeight, behavior: smooth ? 'smooth' : 'auto' })
+    },
+
+    /**
+     * Le champ grandit avec le texte, jusqu'à six lignes environ.
+     */
+    autosize() {
+      const field = this.$refs.field
+      field.style.height = 'auto'
+      field.style.height = `${Math.min(field.scrollHeight, 144)}px`
+    },
+
+    /**
+     * Sur ordinateur, Entrée envoie et Maj + Entrée passe à la ligne. Sur
+     * téléphone (écran tactile), Entrée passe toujours à la ligne.
+     */
+    onKeydown(event) {
+      const isDesktop = window.matchMedia('(pointer: fine)').matches
+      if (event.key === 'Enter' && !event.shiftKey && isDesktop) {
+        event.preventDefault()
+        this.$refs.form.requestSubmit()
+      }
+    },
+
+    async send(event) {
+      if (!this.canSend) {
+        return
+      }
+
+      this.sending = true
+      this.error = ''
+
+      try {
+        const response = await postToServer(event.target)
+
+        if (response.status === 201) {
+          this.$refs.list.querySelector('[data-empty]')?.remove()
+          this.$refs.messages.insertAdjacentHTML('beforeend', await response.text())
+          this.draft = ''
+          this.$nextTick(() => {
+            this.autosize()
+            this.scrollToBottom()
+          })
+        } else if (response.status === 422) {
+          const data = await response.json()
+          this.error = data.errors?.[0]?.message ?? 'Ce message est invalide.'
+        } else if (response.status === 401 || response.status === 403) {
+          window.location.reload()
+        } else {
+          this.error = "Le message n'a pas pu être envoyé. Réessayez."
+        }
+      } catch {
+        this.error = 'Connexion impossible. Vérifiez votre réseau et réessayez.'
+      } finally {
+        this.sending = false
+        this.$refs.field.focus()
+      }
+    },
+
+    /**
+     * Intercepte l'envoi des formulaires de suppression des bulles et
+     * remplace la bulle par sa version « supprimée ».
+     */
+    async deleteMessage(event) {
+      const form = event.target
+      if (!form.matches?.('[data-message-delete]')) {
+        return
+      }
+
+      event.preventDefault()
+      this.error = ''
+
+      try {
+        const response = await postToServer(form)
+
+        if (response.ok) {
+          form.closest('[data-message-id]').outerHTML = await response.text()
+        } else if (response.status === 401 || response.status === 403) {
+          window.location.reload()
+        } else {
+          this.error = "Le message n'a pas pu être supprimé. Réessayez."
+        }
+      } catch {
+        this.error = 'Connexion impossible. Vérifiez votre réseau et réessayez.'
+      }
+    },
+  }
+})
+
 Alpine.start()

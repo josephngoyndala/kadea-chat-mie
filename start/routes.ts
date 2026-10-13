@@ -42,6 +42,17 @@ router
       .where('id', router.matchers.number())
     router.post('conversations', [controllers.Conversations, 'store'])
 
+    router
+      .post('conversations/:conversationId/messages', [controllers.Messages, 'store'])
+      .where('conversationId', router.matchers.number())
+    router
+      .post('conversations/:conversationId/messages/:messageId/delete', [
+        controllers.Messages,
+        'destroy',
+      ])
+      .where('conversationId', router.matchers.number())
+      .where('messageId', router.matchers.number())
+
     router.get('users', [controllers.Users, 'index'])
 
     router.get('profile', [controllers.Profile, 'show'])

@@ -25,6 +25,7 @@ export type MessageBubble = {
   body: string
   isMine: boolean
   isDeleted: boolean
+  canDelete: boolean
   time: string
 }
 
@@ -66,6 +67,34 @@ export default class ConversationPresenter {
   }
 
   /**
+   * Une bulle de message, telle que l'affichent les vues.
+   */
+  bubble(message: Message, viewer: User): MessageBubble {
+    const isDeleted = Boolean(message.deletedAt)
+    const isMine = message.senderId === viewer.id
+
+    return {
+      id: message.id,
+      body: isDeleted ? '' : (message.body ?? ''),
+      isMine,
+      isDeleted,
+      canDelete: isMine && !isDeleted,
+      time: formatMessageTime(message.createdAt),
+    }
+  }
+
+  /**
+   * Données du morceau de HTML renvoyé après l'envoi d'un message : la bulle
+   * et, si c'est le premier message du jour, l'intitulé du jour.
+   */
+  fragment(message: Message, viewer: User, startsNewDay: boolean) {
+    return {
+      message: this.bubble(message, viewer),
+      dayLabel: startsNewDay ? formatDayLabel(message.createdAt) : null,
+    }
+  }
+
+  /**
    * Messages regroupés par jour, avec un intitulé pour chaque jour.
    */
   groupMessages(messages: Message[], viewer: User): MessageGroup[] {
@@ -80,14 +109,7 @@ export default class ConversationPresenter {
         currentDay = day
       }
 
-      const isDeleted = Boolean(message.deletedAt)
-      groups[groups.length - 1].messages.push({
-        id: message.id,
-        body: isDeleted ? '' : (message.body ?? ''),
-        isMine: message.senderId === viewer.id,
-        isDeleted,
-        time: formatMessageTime(message.createdAt),
-      })
+      groups[groups.length - 1].messages.push(this.bubble(message, viewer))
     }
 
     return groups
