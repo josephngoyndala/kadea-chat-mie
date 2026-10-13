@@ -79,32 +79,47 @@ function postToServer(form) {
 }
 
 /**
- * Une bulle de message : un appui sur ses propres messages ouvre le menu de
- * suppression (avec une confirmation).
+ * Une bulle de message : un appui ouvre le menu d'actions (modifier,
+ * supprimer pour moi ou pour tous). Le mode « edit » remplace la bulle par
+ * un petit éditeur.
  */
 Alpine.data('messageBubble', function () {
   return {
     menu: false,
-    confirming: false,
-    canDelete: false,
-
-    init() {
-      this.canDelete = this.$el.dataset.canDelete === 'true'
-    },
+    mode: 'actions',
 
     toggle() {
-      if (!this.canDelete) {
+      if (this.mode === 'edit') {
         return
       }
       this.menu = !this.menu
-      this.confirming = false
+      this.mode = 'actions'
+    },
+
+    close() {
+      this.menu = false
+      this.mode = 'actions'
+    },
+
+    startEdit() {
+      this.menu = false
+      this.mode = 'edit'
+      this.$nextTick(() => {
+        const field = this.$refs.editField
+        field?.focus()
+        field?.setSelectionRange(field.value.length, field.value.length)
+      })
+    },
+
+    cancelEdit() {
+      this.mode = 'actions'
     },
   }
 })
 
 /**
  * Une conversation ouverte : champ de saisie, envoi sans recharger la page,
- * défilement vers le dernier message et suppression d'un message.
+ * défilement vers le dernier message, modification et suppression.
  */
 Alpine.data('conversationChat', function () {
   return {
@@ -165,13 +180,8 @@ Alpine.data('conversationChat', function () {
             this.autosize()
             this.scrollToBottom()
           })
-        } else if (response.status === 422) {
-          const data = await response.json()
-          this.error = data.errors?.[0]?.message ?? 'Ce message est invalide.'
-        } else if (response.status === 401 || response.status === 403) {
-          window.location.reload()
         } else {
-          this.error = "Le message n'a pas pu être envoyé. Réessayez."
+          await this.handleFailure(response, "Le message n'a pas pu être envoyé. Réessayez.")
         }
       } catch {
         this.error = 'Connexion impossible. Vérifiez votre réseau et réessayez.'
@@ -182,15 +192,51 @@ Alpine.data('conversationChat', function () {
     },
 
     /**
-     * Intercepte l'envoi des formulaires de suppression des bulles et
-     * remplace la bulle par sa version « supprimée ».
+     * Point d'entrée des formulaires de la page envoyés dans la conversation :
+     * seuls ceux des bulles (modification, suppression) sont pris en charge
+     * ici, celui du champ de saisie a son propre gestionnaire.
      */
-    async deleteMessage(event) {
+    async handleSubmit(event) {
       const form = event.target
-      if (!form.matches?.('[data-message-delete]')) {
-        return
-      }
 
+      if (form.matches?.('[data-message-delete]')) {
+        await this.deleteMessage(event, form)
+      } else if (form.matches?.('[data-message-edit]')) {
+        await this.editMessage(event, form)
+      }
+    },
+
+    /**
+     * Supprime un message : « me » le retire de l'écran, « everyone » le
+     * remplace par sa version « supprimée ».
+     */
+    async deleteMessage(event, form) {
+      event.preventDefault()
+      this.error = ''
+
+      try {
+        const response = await postToServer(form)
+
+        if (response.ok) {
+          const bubble = form.closest('[data-message-id]')
+
+          if (form.dataset.messageDelete === 'me') {
+            bubble.remove()
+          } else {
+            bubble.outerHTML = await response.text()
+          }
+        } else {
+          await this.handleFailure(response, "Le message n'a pas pu être supprimé. Réessayez.")
+        }
+      } catch {
+        this.error = 'Connexion impossible. Vérifiez votre réseau et réessayez.'
+      }
+    },
+
+    /**
+     * Enregistre la modification d'un message et remplace la bulle.
+     */
+    async editMessage(event, form) {
       event.preventDefault()
       this.error = ''
 
@@ -199,14 +245,31 @@ Alpine.data('conversationChat', function () {
 
         if (response.ok) {
           form.closest('[data-message-id]').outerHTML = await response.text()
-        } else if (response.status === 401 || response.status === 403) {
-          window.location.reload()
         } else {
-          this.error = "Le message n'a pas pu être supprimé. Réessayez."
+          await this.handleFailure(response, "Le message n'a pas pu être modifié. Réessayez.")
         }
       } catch {
         this.error = 'Connexion impossible. Vérifiez votre réseau et réessayez.'
       }
+    },
+
+    /**
+     * Affiche l'erreur renvoyée par le serveur, ou recharge la page si la
+     * session a expiré.
+     */
+    async handleFailure(response, fallbackMessage) {
+      if (response.status === 401 || response.status === 403) {
+        window.location.reload()
+        return
+      }
+
+      if (response.status === 422) {
+        const data = await response.json()
+        this.error = data.errors?.[0]?.message ?? fallbackMessage
+        return
+      }
+
+      this.error = fallbackMessage
     },
   }
 })

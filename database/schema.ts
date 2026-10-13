@@ -87,8 +87,21 @@ export class MessageAttachmentSchema extends BaseModel {
   declare storagePath: string
 }
 
+export class MessageDeletionSchema extends BaseModel {
+  static $columns = ['createdAt', 'id', 'messageId', 'userId'] as const
+  $columns = MessageDeletionSchema.$columns
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
+  @column({ isPrimary: true })
+  declare id: number
+  @column()
+  declare messageId: number
+  @column()
+  declare userId: number
+}
+
 export class MessageSchema extends BaseModel {
-  static $columns = ['body', 'conversationId', 'createdAt', 'deletedAt', 'id', 'senderId', 'updatedAt'] as const
+  static $columns = ['body', 'conversationId', 'createdAt', 'deletedAt', 'editedAt', 'id', 'senderId', 'updatedAt'] as const
   $columns = MessageSchema.$columns
   @column()
   declare body: string | null
@@ -98,6 +111,8 @@ export class MessageSchema extends BaseModel {
   declare createdAt: DateTime
   @column.dateTime()
   declare deletedAt: DateTime | null
+  @column.dateTime()
+  declare editedAt: DateTime | null
   @column({ isPrimary: true })
   declare id: number
   @column()

@@ -46,6 +46,13 @@ router
       .post('conversations/:conversationId/messages', [controllers.Messages, 'store'])
       .where('conversationId', router.matchers.number())
     router
+      .post('conversations/:conversationId/messages/:messageId/edit', [
+        controllers.Messages,
+        'update',
+      ])
+      .where('conversationId', router.matchers.number())
+      .where('messageId', router.matchers.number())
+    router
       .post('conversations/:conversationId/messages/:messageId/delete', [
         controllers.Messages,
         'destroy',

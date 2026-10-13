@@ -15,6 +15,13 @@ export type ConversationWithLastMessage = {
 const HISTORY_LIMIT = 100
 
 /**
+ * Condition SQL qui écarte les messages que l'utilisateur a masqués
+ * (« supprimer pour moi »). Le paramètre est l'identifiant de l'utilisateur.
+ */
+const NOT_HIDDEN_FOR_USER =
+  'NOT EXISTS (SELECT 1 FROM message_deletions WHERE message_deletions.message_id = messages.id AND message_deletions.user_id = ?)'
+
+/**
  * Règles métier des conversations : liste, accès, historique, création.
  */
 export default class ConversationService {
@@ -35,7 +42,10 @@ export default class ConversationService {
       })
       .orderByRaw('last_message_at DESC NULLS LAST, created_at DESC')
 
-    const lastMessages = await this.lastMessagesOf(conversations.map((item) => item.id))
+    const lastMessages = await this.lastMessagesOf(
+      conversations.map((item) => item.id),
+      user
+    )
 
     return conversations.map((conversation) => ({
       conversation,
@@ -61,11 +71,13 @@ export default class ConversationService {
   }
 
   /**
-   * Derniers messages d'une conversation, dans l'ordre chronologique.
+   * Derniers messages d'une conversation vus par l'utilisateur (sans ceux
+   * qu'il a masqués), dans l'ordre chronologique.
    */
-  async history(conversation: Conversation) {
+  async history(conversation: Conversation, viewer: User) {
     const messages = await Message.query()
       .where('conversation_id', conversation.id)
+      .whereRaw(NOT_HIDDEN_FOR_USER, [viewer.id])
       .orderBy('id', 'desc')
       .limit(HISTORY_LIMIT)
 
@@ -125,9 +137,10 @@ export default class ConversationService {
   }
 
   /**
-   * Dernier message de chacune des conversations, en une seule requête.
+   * Dernier message visible de chacune des conversations, en une seule
+   * requête.
    */
-  private async lastMessagesOf(conversationIds: number[]) {
+  private async lastMessagesOf(conversationIds: number[], viewer: User) {
     const lastMessages = new Map<number, Message>()
     if (conversationIds.length === 0) {
       return lastMessages
@@ -136,6 +149,7 @@ export default class ConversationService {
     const latestIds = db
       .from('messages')
       .whereIn('conversation_id', conversationIds)
+      .whereRaw(NOT_HIDDEN_FOR_USER, [viewer.id])
       .groupBy('conversation_id')
       .max('id')
 

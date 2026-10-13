@@ -4,6 +4,7 @@ import type User from '#models/user'
 import AvatarService from '#services/avatar_service'
 import type { ConversationWithLastMessage } from '#services/conversation_service'
 import { dayKey, formatDayLabel, formatListDate, formatMessageTime } from '#services/date_formatter'
+import { isWithinEditWindow } from '#services/message_rules'
 
 export type ConversationCard = {
   id: number
@@ -25,7 +26,9 @@ export type MessageBubble = {
   body: string
   isMine: boolean
   isDeleted: boolean
-  canDelete: boolean
+  isEdited: boolean
+  canEdit: boolean
+  canDeleteForEveryone: boolean
   time: string
 }
 
@@ -67,7 +70,9 @@ export default class ConversationPresenter {
   }
 
   /**
-   * Une bulle de message, telle que l'affichent les vues.
+   * Une bulle de message, avec les actions que l'utilisateur peut faire
+   * dessus. C'est le serveur qui fait respecter ces règles : l'interface ne
+   * fait que cacher les boutons non permis.
    */
   bubble(message: Message, viewer: User): MessageBubble {
     const isDeleted = Boolean(message.deletedAt)
@@ -78,14 +83,16 @@ export default class ConversationPresenter {
       body: isDeleted ? '' : (message.body ?? ''),
       isMine,
       isDeleted,
-      canDelete: isMine && !isDeleted,
+      isEdited: Boolean(message.editedAt) && !isDeleted,
+      canEdit: isMine && !isDeleted && isWithinEditWindow(message.createdAt),
+      canDeleteForEveryone: isMine && !isDeleted,
       time: formatMessageTime(message.createdAt),
     }
   }
 
   /**
-   * Données du morceau de HTML renvoyé après l'envoi d'un message : la bulle
-   * et, si c'est le premier message du jour, l'intitulé du jour.
+   * Données du morceau de HTML renvoyé après une action sur un message : la
+   * bulle et, si c'est le premier message du jour, l'intitulé du jour.
    */
   fragment(message: Message, viewer: User, startsNewDay: boolean) {
     return {

@@ -34,7 +34,7 @@ export default class ConversationsController {
     const conversation = await this.conversations.findForMember(user, Number(params.id))
     const [items, messages] = await Promise.all([
       this.conversations.listFor(user),
-      this.conversations.history(conversation),
+      this.conversations.history(conversation, user),
     ])
 
     return view.render('pages/conversations/show', {
