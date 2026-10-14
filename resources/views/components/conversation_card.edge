@@ -4,7 +4,10 @@
 @let(isActive = $props.get('active', false))
 
 {{-- La carte entière ouvre la discussion (lien étiré), sauf la photo, qui s'agrandit. --}}
-<li class="relative flex items-center gap-3 px-4 py-3 transition {{ isActive ? 'bg-brand-50' : 'hover:bg-paper' }}">
+<li
+  data-conversation-id="{{ cardId }}"
+  class="relative flex items-center gap-3 px-4 py-3 transition {{ isActive ? 'bg-brand-50' : 'hover:bg-paper' }}"
+>
   <div class="relative z-10 flex-none">
     @if(cardAvatarUrl)
       @!avatar({ src: cardAvatarUrl, name: cardTitle, size: 52 })

@@ -3,6 +3,7 @@ import Conversation from '#models/conversation'
 import ConversationMember from '#models/conversation_member'
 import Message from '#models/message'
 import User from '#models/user'
+import { NOT_HIDDEN_FOR_USER } from '#services/message_rules'
 
 export type ConversationWithLastMessage = {
   conversation: Conversation
@@ -13,13 +14,6 @@ export type ConversationWithLastMessage = {
  * Nombre de messages chargés à l'ouverture d'une conversation.
  */
 const HISTORY_LIMIT = 100
-
-/**
- * Condition SQL qui écarte les messages que l'utilisateur a masqués
- * (« supprimer pour moi »). Le paramètre est l'identifiant de l'utilisateur.
- */
-const NOT_HIDDEN_FOR_USER =
-  'NOT EXISTS (SELECT 1 FROM message_deletions WHERE message_deletions.message_id = messages.id AND message_deletions.user_id = ?)'
 
 /**
  * Règles métier des conversations : liste, accès, historique, création.
@@ -71,6 +65,19 @@ export default class ConversationService {
   }
 
   /**
+   * Indique si l'utilisateur est membre de la conversation. Sert aussi à
+   * autoriser l'abonnement au canal temps réel de la conversation.
+   */
+  async isMember(userId: number, conversationId: number) {
+    const membership = await ConversationMember.query()
+      .where('conversation_id', conversationId)
+      .where('user_id', userId)
+      .first()
+
+    return membership !== null
+  }
+
+  /**
    * Derniers messages d'une conversation vus par l'utilisateur (sans ceux
    * qu'il a masqués), dans l'ordre chronologique.
    */
@@ -82,6 +89,15 @@ export default class ConversationService {
       .limit(HISTORY_LIMIT)
 
     return messages.reverse()
+  }
+
+  /**
+   * Dernier message visible d'une conversation pour l'utilisateur.
+   */
+  async lastMessageOf(conversation: Conversation, viewer: User) {
+    const lastMessages = await this.lastMessagesOf([conversation.id], viewer)
+
+    return lastMessages.get(conversation.id) ?? null
   }
 
   /**

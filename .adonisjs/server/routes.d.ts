@@ -5,6 +5,9 @@ type ParamValue = string | number | bigint | boolean
 export type ScannedRoutes = {
   ALL: {
     'drive.fs.serve': { paramsTuple: [...ParamValue[]]; params: {'*': ParamValue[]} }
+    'event_stream': { paramsTuple?: []; params?: {} }
+    'subscribe': { paramsTuple?: []; params?: {} }
+    'unsubscribe': { paramsTuple?: []; params?: {} }
     'home': { paramsTuple?: []; params?: {} }
     'new_account.create': { paramsTuple?: []; params?: {} }
     'new_account.store': { paramsTuple?: []; params?: {} }
@@ -20,7 +23,10 @@ export type ScannedRoutes = {
     'session.destroy': { paramsTuple?: []; params?: {} }
     'dashboard': { paramsTuple?: []; params?: {} }
     'conversations.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'conversations.card': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'conversations.store': { paramsTuple?: []; params?: {} }
+    'messages.index': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
+    'messages.show': { paramsTuple: [ParamValue,ParamValue]; params: {'conversationId': ParamValue,'messageId': ParamValue} }
     'messages.store': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
     'messages.update': { paramsTuple: [ParamValue,ParamValue]; params: {'conversationId': ParamValue,'messageId': ParamValue} }
     'messages.destroy': { paramsTuple: [ParamValue,ParamValue]; params: {'conversationId': ParamValue,'messageId': ParamValue} }
@@ -33,6 +39,7 @@ export type ScannedRoutes = {
   }
   GET: {
     'drive.fs.serve': { paramsTuple: [...ParamValue[]]; params: {'*': ParamValue[]} }
+    'event_stream': { paramsTuple?: []; params?: {} }
     'home': { paramsTuple?: []; params?: {} }
     'new_account.create': { paramsTuple?: []; params?: {} }
     'session.create': { paramsTuple?: []; params?: {} }
@@ -42,11 +49,15 @@ export type ScannedRoutes = {
     'password_reset.edit': { paramsTuple: [ParamValue]; params: {'token': ParamValue} }
     'dashboard': { paramsTuple?: []; params?: {} }
     'conversations.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'conversations.card': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'messages.index': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
+    'messages.show': { paramsTuple: [ParamValue,ParamValue]; params: {'conversationId': ParamValue,'messageId': ParamValue} }
     'users.index': { paramsTuple?: []; params?: {} }
     'profile.show': { paramsTuple?: []; params?: {} }
   }
   HEAD: {
     'drive.fs.serve': { paramsTuple: [...ParamValue[]]; params: {'*': ParamValue[]} }
+    'event_stream': { paramsTuple?: []; params?: {} }
     'home': { paramsTuple?: []; params?: {} }
     'new_account.create': { paramsTuple?: []; params?: {} }
     'session.create': { paramsTuple?: []; params?: {} }
@@ -56,10 +67,15 @@ export type ScannedRoutes = {
     'password_reset.edit': { paramsTuple: [ParamValue]; params: {'token': ParamValue} }
     'dashboard': { paramsTuple?: []; params?: {} }
     'conversations.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'conversations.card': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'messages.index': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
+    'messages.show': { paramsTuple: [ParamValue,ParamValue]; params: {'conversationId': ParamValue,'messageId': ParamValue} }
     'users.index': { paramsTuple?: []; params?: {} }
     'profile.show': { paramsTuple?: []; params?: {} }
   }
   POST: {
+    'subscribe': { paramsTuple?: []; params?: {} }
+    'unsubscribe': { paramsTuple?: []; params?: {} }
     'new_account.store': { paramsTuple?: []; params?: {} }
     'session.store': { paramsTuple?: []; params?: {} }
     'email_verification.resend': { paramsTuple?: []; params?: {} }
