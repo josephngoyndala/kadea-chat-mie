@@ -39,8 +39,22 @@ export default class RealtimeService {
    * doit être rafraîchie (aperçu, heure, position).
    */
   conversationUpdated(conversation: Conversation) {
-    for (const member of conversation.members) {
-      transmit.broadcast(`users/${member.userId}`, {
+    this.membersChanged(conversation)
+  }
+
+  /**
+   * Prévient les membres du groupe, ainsi que des utilisateurs en plus
+   * (ajoutés ou retirés), de rafraîchir leur liste. Pour un utilisateur
+   * retiré, la carte demandée est introuvable : sa liste la retire.
+   */
+  membersChanged(conversation: Conversation, extraUserIds: number[] = []) {
+    const userIds = new Set([
+      ...conversation.members.map((member) => member.userId),
+      ...extraUserIds,
+    ])
+
+    for (const userId of userIds) {
+      transmit.broadcast(`users/${userId}`, {
         type: 'conversation.updated',
         conversationId: conversation.id,
       })

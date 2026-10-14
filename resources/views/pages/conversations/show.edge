@@ -29,7 +29,16 @@
         @end
 
         <div class="min-w-0 flex-1">
-          <h1 class="truncate text-base font-bold tracking-tight">{{ header.title }}</h1>
+          @if(header.isGroup)
+            <a href="{{ urlFor('group_members.index', { conversationId: activeId }) }}" class="block min-w-0">
+              <h1 class="truncate text-base font-bold tracking-tight">{{ header.title }}</h1>
+              <p class="truncate text-xs text-muted">
+                {{ header.memberCount }} membre{{ header.memberCount > 1 ? 's' : '' }} · Appuyez pour voir le groupe
+              </p>
+            </a>
+          @else
+            <h1 class="truncate text-base font-bold tracking-tight">{{ header.title }}</h1>
+          @end
         </div>
       </header>
 

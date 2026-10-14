@@ -41,13 +41,18 @@ export default class ConversationsController {
       activeId: conversation.id,
       conversations: await this.presenter.cards(items, user),
       header: await this.presenter.header(conversation, user),
-      groups: this.presenter.groupMessages(messages, user),
+      groups: this.presenter.groupMessages(
+        messages,
+        user,
+        this.presenter.showsAuthors(conversation)
+      ),
     })
   }
 
   /**
    * Renvoie la carte d'une conversation (morceau de HTML) pour rafraîchir la
-   * liste en temps réel
+   * liste en temps réel. Si l'utilisateur n'est plus membre, la réponse est
+   * « introuvable » et sa liste retire la carte.
    */
   async card({ auth, params, request, view }: HttpContext) {
     const user = auth.getUserOrFail()

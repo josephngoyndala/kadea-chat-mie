@@ -1,0 +1,144 @@
+@layouts.app({ title: header.title })
+  @page({
+    title: header.title,
+    description: `${members.length} membre${members.length > 1 ? 's' : ''}`,
+  })
+    <div class="flex w-full min-w-0 max-w-2xl flex-col gap-4 sm:gap-6">
+      <a
+        href="{{ urlFor('conversations.show', { id: conversationId }) }}"
+        class="inline-flex w-fit min-h-11 items-center gap-2 text-sm font-semibold text-muted transition hover:text-ink"
+      >
+        @svg('lucide:arrow-left', { width: 18, height: 18 })
+        Retour à la discussion
+      </a>
+
+      {{-- Membres --}}
+      <ul class="divide-y divide-line overflow-hidden rounded-3xl border border-line bg-white shadow-card">
+        @each(member in members)
+          <li class="flex items-center gap-3 p-4" x-data="{ confirming: false }">
+            @if(member.avatarUrl)
+              @!avatar({ src: member.avatarUrl, name: member.name, size: 48 })
+            @else
+              @!avatar({ initials: member.initials, size: 48 })
+            @end
+
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-[15px] font-bold">{{ member.name }}{{ member.isMe ? ' (vous)' : '' }}</p>
+              @if(member.isAdmin)
+                <span class="mt-0.5 inline-flex rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-semibold text-brand">
+                  Administrateur
+                </span>
+              @end
+            </div>
+
+            @if(isAdmin && !member.isMe)
+              @form({
+                route: 'group_members.destroy',
+                routeParams: { conversationId: conversationId, userId: member.id },
+                method: 'POST',
+                class: 'flex flex-none items-center gap-1',
+              })
+                <button
+                  type="button"
+                  x-show="!confirming"
+                  x-on:click="confirming = true"
+                  class="inline-flex min-h-11 cursor-pointer items-center rounded-xl px-3 text-sm font-semibold text-muted transition hover:bg-paper hover:text-brand"
+                >
+                  Retirer
+                </button>
+                <button
+                  type="submit"
+                  x-show="confirming"
+                  x-cloak
+                  class="inline-flex min-h-11 cursor-pointer items-center rounded-xl bg-brand px-4 text-sm font-semibold text-white"
+                >
+                  Confirmer
+                </button>
+                <button
+                  type="button"
+                  x-show="confirming"
+                  x-cloak
+                  x-on:click="confirming = false"
+                  class="inline-flex min-h-11 cursor-pointer items-center rounded-xl px-3 text-sm font-semibold text-muted transition hover:bg-paper"
+                >
+                  Annuler
+                </button>
+              @end
+            @end
+          </li>
+        @end
+      </ul>
+
+      {{-- Ajout de membres : réservé aux administrateurs --}}
+      @if(isAdmin)
+        <section class="rounded-3xl border border-line bg-white p-5 shadow-card sm:p-6">
+          <h2 class="text-lg font-bold tracking-tight">Ajouter des membres</h2>
+
+          <form
+            method="GET"
+            action="{{ urlFor('group_members.index', { conversationId: conversationId }) }}"
+            role="search"
+            class="mt-4"
+            x-data
+            x-on:input.debounce.400ms="$el.requestSubmit()"
+          >
+            <label for="q" class="sr-only">Rechercher un utilisateur</label>
+            <div class="relative">
+              <span class="pointer-events-none absolute inset-y-0 left-0 grid w-12 place-items-center text-muted">
+                @svg('lucide:search', { width: 20, height: 20 })
+              </span>
+              <input
+                type="search"
+                id="q"
+                name="q"
+                value="{{ term }}"
+                autocomplete="off"
+                placeholder="Nom ou adresse e-mail"
+                class="h-14 w-full min-w-0 rounded-field border border-line bg-white pl-12 pr-4 text-[15px] outline-none transition placeholder:text-[#8d8d8d] focus:border-brand focus:ring-4 focus:ring-brand/15"
+              />
+            </div>
+          </form>
+
+          @if(candidates.length)
+            <ul class="mt-4 divide-y divide-line">
+              @each(person in candidates)
+                <li class="flex items-center gap-3 py-3">
+                  @if(person.avatarUrl)
+                    @!avatar({ src: person.avatarUrl, name: person.name, size: 44 })
+                  @else
+                    @!avatar({ initials: person.initials, size: 44 })
+                  @end
+
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate text-[15px] font-bold">{{ person.name }}</p>
+                    <p class="truncate text-sm text-muted">{{ person.maskedEmail }}</p>
+                  </div>
+
+                  @form({
+                    route: 'group_members.store',
+                    routeParams: { conversationId: conversationId },
+                    method: 'POST',
+                    class: 'flex-none',
+                  })
+                    <input type="hidden" name="userId" value="{{ person.id }}" />
+                    @button({ type: 'submit', size: 'sm' })
+                      Ajouter
+                    @end
+                  @end
+                </li>
+              @end
+            </ul>
+          @else
+            <p class="mt-4 text-sm text-muted">
+              {{ term ? 'Aucun membre trouvé pour cette recherche.' : 'Tous les membres confirmés font déjà partie du groupe.' }}
+            </p>
+          @end
+        </section>
+      @else
+        <p class="px-1 text-sm text-muted">
+          Seuls les administrateurs du groupe peuvent ajouter ou retirer des membres.
+        </p>
+      @end
+    </div>
+  @end
+@end

@@ -6,6 +6,8 @@
 export const controllers = {
   Conversations: () => import('#controllers/conversations_controller'),
   EmailVerification: () => import('#controllers/email_verification_controller'),
+  GroupMembers: () => import('#controllers/group_members_controller'),
+  Groups: () => import('#controllers/groups_controller'),
   Messages: () => import('#controllers/messages_controller'),
   NewAccount: () => import('#controllers/new_account_controller'),
   PasswordReset: () => import('#controllers/password_reset_controller'),
