@@ -20,8 +20,9 @@ const HISTORY_LIMIT = 100
  */
 export default class ConversationService {
   /**
-   * Conversations de l'utilisateur, la plus récente en premier. Une
-   * conversation encore vide n'apparaît que chez celui qui l'a créée.
+   * Conversations de l'utilisateur, la plus récente en premier. Un groupe est
+   * toujours visible de ses membres ; une conversation privée encore vide
+   * n'apparaît que chez celui qui l'a créée.
    */
   async listFor(user: User): Promise<ConversationWithLastMessage[]> {
     const conversations = await Conversation.query()
@@ -29,7 +30,10 @@ export default class ConversationService {
         members.where('user_id', user.id)
       })
       .where((visible) => {
-        visible.whereNotNull('last_message_at').orWhere('created_by', user.id)
+        visible
+          .where('type', 'group')
+          .orWhereNotNull('last_message_at')
+          .orWhere('created_by', user.id)
       })
       .preload('members', (members) => {
         members.preload('user')
@@ -65,6 +69,22 @@ export default class ConversationService {
   }
 
   /**
+   * Comme findForMember, mais uniquement pour un groupe.
+   */
+  async findGroupForMember(user: User, conversationId: number) {
+    return Conversation.query()
+      .where('id', conversationId)
+      .where('type', 'group')
+      .whereHas('members', (members) => {
+        members.where('user_id', user.id)
+      })
+      .preload('members', (members) => {
+        members.preload('user')
+      })
+      .firstOrFail()
+  }
+
+  /**
    * Indique si l'utilisateur est membre de la conversation. Sert aussi à
    * autoriser l'abonnement au canal temps réel de la conversation.
    */
@@ -79,12 +99,13 @@ export default class ConversationService {
 
   /**
    * Derniers messages d'une conversation vus par l'utilisateur (sans ceux
-   * qu'il a masqués), dans l'ordre chronologique.
+   * qu'il a masqués), dans l'ordre chronologique, avec leur auteur.
    */
   async history(conversation: Conversation, viewer: User) {
     const messages = await Message.query()
       .where('conversation_id', conversation.id)
       .whereRaw(NOT_HIDDEN_FOR_USER, [viewer.id])
+      .preload('sender')
       .orderBy('id', 'desc')
       .limit(HISTORY_LIMIT)
 
@@ -154,7 +175,7 @@ export default class ConversationService {
 
   /**
    * Dernier message visible de chacune des conversations, en une seule
-   * requête.
+   * requête, avec son auteur.
    */
   private async lastMessagesOf(conversationIds: number[], viewer: User) {
     const lastMessages = new Map<number, Message>()
@@ -169,7 +190,7 @@ export default class ConversationService {
       .groupBy('conversation_id')
       .max('id')
 
-    const messages = await Message.query().whereIn('id', latestIds)
+    const messages = await Message.query().whereIn('id', latestIds).preload('sender')
     for (const message of messages) {
       lastMessages.set(message.conversationId, message)
     }

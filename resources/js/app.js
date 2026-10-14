@@ -80,6 +80,35 @@ function postToServer(form) {
 }
 
 /**
+ * Sélecteur de membres d'un nouveau groupe : filtre la liste (sans tenir
+ * compte des accents) et vérifie qu'un nom et au moins un membre sont
+ * renseignés avant d'activer le bouton de création.
+ */
+Alpine.data('groupPicker', function () {
+  return {
+    query: '',
+    name: '',
+    selected: [],
+
+    normalize(text) {
+      return text
+        .normalize('NFD')
+        .replace(/\p{Diacritic}/gu, '')
+        .toLowerCase()
+    },
+
+    visible(searchText) {
+      const words = this.normalize(this.query).split(/\s+/).filter(Boolean)
+      return words.every((word) => searchText.includes(word))
+    },
+
+    get canSubmit() {
+      return this.name.trim().length >= 2 && this.selected.length > 0
+    },
+  }
+})
+
+/**
  * Une bulle de message : un appui ouvre le menu d'actions (modifier,
  * supprimer pour moi ou pour tous). Le mode « edit » remplace la bulle par
  * un petit éditeur.
@@ -453,8 +482,8 @@ Alpine.data('conversationChat', function () {
 
 /**
  * La liste des conversations : quand une conversation change (nouveau
- * message, modification, suppression), sa carte est rafraîchie et remonte en
- * haut de la liste, sans recharger la page.
+ * message, modification, suppression, ajout ou retrait d'un membre), sa carte
+ * est rafraîchie et remonte en haut de la liste, sans recharger la page.
  */
 Alpine.data('conversationList', function () {
   return {
@@ -476,6 +505,11 @@ Alpine.data('conversationList', function () {
 
       try {
         const response = await fetch(url, { headers: { 'X-Chat-Fetch': '1' } })
+
+        if (response.status === 404) {
+          this.removeCard(conversationId)
+          return
+        }
         if (!response.ok) {
           return
         }
@@ -496,6 +530,18 @@ Alpine.data('conversationList', function () {
         this.$el.querySelector('[data-list-empty]')?.remove()
       } catch {
         // Réseau coupé : la liste sera à jour au prochain chargement.
+      }
+    },
+
+    /**
+     * L'utilisateur n'a plus accès à cette conversation (retiré d'un groupe) :
+     * on retire sa carte, et on le renvoie à la liste s'il la regardait.
+     */
+    removeCard(conversationId) {
+      this.$refs.items.querySelector(`[data-conversation-id="${conversationId}"]`)?.remove()
+
+      if (String(conversationId) === this.$el.dataset.activeId) {
+        window.location.assign(this.$el.dataset.dashboardUrl)
       }
     },
   }

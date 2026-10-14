@@ -54,6 +54,23 @@ router
       .where('id', router.matchers.number())
     router.post('conversations', [controllers.Conversations, 'store'])
 
+    router.get('groups/new', [controllers.Groups, 'create'])
+    router.post('groups', [controllers.Groups, 'store'])
+
+    router
+      .get('conversations/:conversationId/members', [controllers.GroupMembers, 'index'])
+      .where('conversationId', router.matchers.number())
+    router
+      .post('conversations/:conversationId/members', [controllers.GroupMembers, 'store'])
+      .where('conversationId', router.matchers.number())
+    router
+      .post('conversations/:conversationId/members/:userId/delete', [
+        controllers.GroupMembers,
+        'destroy',
+      ])
+      .where('conversationId', router.matchers.number())
+      .where('userId', router.matchers.number())
+
     router
       .get('conversations/:conversationId/messages', [controllers.Messages, 'index'])
       .where('conversationId', router.matchers.number())

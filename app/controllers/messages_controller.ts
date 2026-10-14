@@ -29,12 +29,13 @@ export default class MessagesController {
     const { after } = await request.validateUsing(catchUpValidator)
 
     const items = await this.messages.listAfter(user, conversation.id, after ?? 0)
+    const showAuthor = this.presenter.showsAuthors(conversation)
 
     const parts = await Promise.all(
       items.map(({ message, startsNewDay }) =>
         view.render('fragments/message', {
           conversationId: conversation.id,
-          ...this.presenter.fragment(message, user, startsNewDay),
+          ...this.presenter.fragment(message, user, startsNewDay, showAuthor),
         })
       )
     )
@@ -57,7 +58,12 @@ export default class MessagesController {
 
     const html = await view.render('fragments/message', {
       conversationId: conversation.id,
-      ...this.presenter.fragment(message, user, startsNewDay),
+      ...this.presenter.fragment(
+        message,
+        user,
+        startsNewDay,
+        this.presenter.showsAuthors(conversation)
+      ),
     })
 
     return response.type('html').send(html)
@@ -80,7 +86,12 @@ export default class MessagesController {
 
     const html = await view.render('fragments/message', {
       conversationId: conversation.id,
-      ...this.presenter.fragment(message, user, startsNewDay),
+      ...this.presenter.fragment(
+        message,
+        user,
+        startsNewDay,
+        this.presenter.showsAuthors(conversation)
+      ),
     })
 
     return response.status(201).type('html').send(html)
@@ -117,7 +128,7 @@ export default class MessagesController {
 
     const html = await view.render('fragments/message', {
       conversationId: conversation.id,
-      ...this.presenter.fragment(message, user, false),
+      ...this.presenter.fragment(message, user, false, this.presenter.showsAuthors(conversation)),
     })
 
     return response.type('html').send(html)
@@ -151,7 +162,7 @@ export default class MessagesController {
 
     const html = await view.render('fragments/message', {
       conversationId: conversation.id,
-      ...this.presenter.fragment(message, user, false),
+      ...this.presenter.fragment(message, user, false, this.presenter.showsAuthors(conversation)),
     })
 
     return response.type('html').send(html)

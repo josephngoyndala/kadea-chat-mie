@@ -50,15 +50,16 @@ export default class MessageService {
   }
 
   /**
-   * Un message de la conversation, à condition que l'utilisateur ne l'ait
-   * pas masqué. Sinon la recherche échoue et l'application répond
-   * « introuvable ».
+   * Un message de la conversation, avec son auteur, à condition que
+   * l'utilisateur ne l'ait pas masqué. Sinon la recherche échoue et
+   * l'application répond « introuvable ».
    */
   async findVisible(user: User, conversationId: number, messageId: number) {
     return Message.query()
       .where('id', messageId)
       .where('conversation_id', conversationId)
       .whereRaw(NOT_HIDDEN_FOR_USER, [user.id])
+      .preload('sender')
       .firstOrFail()
   }
 
@@ -84,6 +85,7 @@ export default class MessageService {
       .where('conversation_id', conversationId)
       .where('id', '>', afterId)
       .whereRaw(NOT_HIDDEN_FOR_USER, [user.id])
+      .preload('sender')
       .orderBy('id', 'asc')
       .limit(100)
 

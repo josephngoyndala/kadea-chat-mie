@@ -2,6 +2,7 @@ import User from '#models/user'
 
 const PAGE_SIZE = 20
 const MAX_WORDS = 5
+const PICKER_LIMIT = 200
 
 /**
  * Retire les accents côté base de données sans extension : la fonction
@@ -14,17 +15,23 @@ const NORMALIZED_NAME = `translate(lower(coalesce(full_name, '')), '${ACCENTED}'
 const NORMALIZED_EMAIL = 'lower(email)'
 
 /**
- * Annuaire et recherche des utilisateurs avec qui démarrer une conversation.
+ * Annuaire et recherche des utilisateurs avec qui démarrer une conversation
+ * ou à ajouter à un groupe.
  */
 export default class UserSearchService {
   /**
    * Sans terme : tous les membres, les plus récents d'abord. Avec un terme :
    * ceux dont le nom ou l'e-mail contient chacun des mots saisis, sans tenir
    * compte des accents ni des majuscules. Seuls les comptes dont l'adresse est
-   * confirmée sont proposés, et jamais l'utilisateur lui-même.
+   * confirmée sont proposés, jamais l'utilisateur lui-même, ni ceux dont les
+   * identifiants sont à exclure.
    */
-  async find(viewer: User, rawTerm: string | undefined, page: number) {
+  async find(viewer: User, rawTerm: string | undefined, page: number, excludeIds: number[] = []) {
     const query = User.query().whereNot('id', viewer.id).whereNotNull('email_verified_at')
+
+    if (excludeIds.length > 0) {
+      query.whereNotIn('id', excludeIds)
+    }
 
     const words = this.wordsOf(rawTerm)
 
@@ -50,6 +57,18 @@ export default class UserSearchService {
     }
 
     return query.paginate(page, PAGE_SIZE)
+  }
+
+  /**
+   * Membres proposés dans le sélecteur de création d'un groupe, par ordre
+   * alphabétique (le filtrage se fait ensuite dans le navigateur).
+   */
+  async listForPicker(viewer: User) {
+    return User.query()
+      .whereNot('id', viewer.id)
+      .whereNotNull('email_verified_at')
+      .orderBy('full_name')
+      .limit(PICKER_LIMIT)
   }
 
   /**

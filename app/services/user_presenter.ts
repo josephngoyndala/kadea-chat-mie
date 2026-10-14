@@ -9,10 +9,11 @@ export type DirectoryEntry = {
   initials: string
   avatarUrl: string | null
   joinedOn: string
+  searchText: string
 }
 
 /**
- * Prépare l'affichage des utilisateurs dans l'annuaire.
+ * Prépare l'affichage des utilisateurs dans l'annuaire et les sélecteurs.
  */
 export default class UserPresenter {
   private avatars = new AvatarService()
@@ -26,6 +27,7 @@ export default class UserPresenter {
         initials: user.initials,
         avatarUrl: await this.avatars.urlFor(user),
         joinedOn: formatShortDate(user.createdAt),
+        searchText: this.normalize(`${user.fullName ?? ''} ${user.email}`),
       }))
     )
   }
@@ -42,5 +44,15 @@ export default class UserPresenter {
 
     const visible = localPart.length > 2 ? localPart.slice(0, 2) : localPart.slice(0, 1)
     return `${visible}***@${domain}`
+  }
+
+  /**
+   * Texte en minuscules et sans accents, pour filtrer dans le navigateur.
+   */
+  private normalize(text: string) {
+    return text
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .toLowerCase()
   }
 }

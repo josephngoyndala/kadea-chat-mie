@@ -4,13 +4,20 @@
   data-user-id="{{ auth?.user?.id }}"
   data-active-id="{{ activeId ?? '' }}"
   data-card-url="{{ urlFor('conversations.card', { id: '0' }) }}"
+  data-dashboard-url="{{ urlFor('dashboard') }}"
 >
   <div class="flex flex-none items-center justify-between gap-3 px-4 pb-3 pt-4 sm:pt-5">
     <h1 class="text-2xl font-extrabold tracking-tight">Discussions</h1>
-    @button({ route: 'users.index', size: 'sm' })
-      @svg('lucide:square-pen', { width: 16, height: 16 })
-      Nouvelle
-    @end
+    <div class="flex items-center gap-2">
+      @button({ route: 'groups.create', variant: 'secondary', size: 'sm' })
+        @svg('lucide:users-round', { width: 16, height: 16 })
+        Groupe
+      @end
+      @button({ route: 'users.index', size: 'sm' })
+        @svg('lucide:square-pen', { width: 16, height: 16 })
+        Nouvelle
+      @end
+    </div>
   </div>
 
   <ul
@@ -29,7 +36,7 @@
       </span>
       <div>
         <h2 class="text-lg font-bold tracking-tight">Aucune discussion</h2>
-        <p class="mt-1 text-sm text-muted">Recherchez un utilisateur pour démarrer votre première conversation.</p>
+        <p class="mt-1 text-sm text-muted">Recherchez un utilisateur pour démarrer votre première conversation, ou créez un groupe.</p>
       </div>
       @button({ route: 'users.index', arrow: true })
         Nouvelle discussion
