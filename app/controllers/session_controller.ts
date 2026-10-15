@@ -1,4 +1,5 @@
-import { errors } from '@adonisjs/auth'
+import { errors as authErrors } from '@adonisjs/auth'
+import limiter from '@adonisjs/limiter/services/main'
 import User from '#models/user'
 import { loginValidator } from '#validators/user'
 import type { HttpContext } from '@adonisjs/core/http'
@@ -16,23 +17,17 @@ export default class SessionController {
   }
 
   /**
-   * Vérifie les identifiants, refuse les comptes dont l'adresse n'est pas
-   * confirmée, puis crée la session (avec un jeton « se souvenir de moi »
-   * si la case est cochée)
+   * Vérifie les identifiants (avec une limite sur les tentatives ratées),
+   * refuse les comptes dont l'adresse n'est pas confirmée, puis crée la
+   * session (avec un jeton « se souvenir de moi » si la case est cochée)
    */
-  async store({ request, auth, response, session }: HttpContext) {
+  async store(ctx: HttpContext) {
+    const { request, auth, response, session } = ctx
     const { email, password, remember } = await request.validateUsing(loginValidator)
 
-    let user: User
-    try {
-      user = await User.verifyCredentials(email, password)
-    } catch (error) {
-      if (error instanceof errors.E_INVALID_CREDENTIALS) {
-        session.flashOnly(['email'])
-        session.flash('error', 'Adresse e-mail ou mot de passe incorrect.')
-        return response.redirect().back()
-      }
-      throw error
+    const user = await this.authenticate(ctx, email, password)
+    if (!user) {
+      return response.redirect().back()
     }
 
     /**
@@ -65,5 +60,59 @@ export default class SessionController {
     await auth.use('web').logout()
     session.flash('success', 'Vous avez été déconnecté.')
     return response.redirect().toRoute('session.create')
+  }
+
+  /**
+   * Vérifie l'e-mail et le mot de passe, sous la protection de deux limites :
+   * 20 échecs par minute pour une adresse IP (un robot qui essaie beaucoup
+   * d'adresses) et 5 échecs par minute pour un couple IP + e-mail (un robot
+   * qui s'acharne sur un compte), avec un blocage de 15 minutes. Seuls les
+   * échecs consomment une tentative.
+   *
+   * Renvoie l'utilisateur, ou null après avoir préparé le message d'erreur à
+   * afficher (identifiants incorrects, ou trop de tentatives).
+   */
+  private async authenticate({ request, session }: HttpContext, email: string, password: string) {
+    const loginLimiter = limiter.multi([
+      { key: `login_ip_${request.ip()}`, requests: 20, duration: '1 min' },
+      {
+        key: `login_${request.ip()}_${email}`,
+        requests: 5,
+        duration: '1 min',
+        blockDuration: '15 mins',
+      },
+    ])
+
+    try {
+      /**
+       * Si les identifiants sont faux, penalize consomme une tentative puis
+       * relance l'erreur (attrapée plus bas). Si la limite est atteinte, il
+       * renvoie l'erreur de limite sans même vérifier le mot de passe.
+       */
+      const [throttleError, user] = await loginLimiter.penalize(() => {
+        return User.verifyCredentials(email, password)
+      })
+
+      if (throttleError) {
+        const minutes = Math.max(1, Math.ceil(throttleError.response.availableIn / 60))
+
+        session.flashOnly(['email'])
+        session.flash(
+          'error',
+          `Trop de tentatives de connexion. Réessayez dans ${minutes} minute${minutes > 1 ? 's' : ''}.`
+        )
+        return null
+      }
+
+      return user
+    } catch (error) {
+      if (error instanceof authErrors.E_INVALID_CREDENTIALS) {
+        session.flashOnly(['email'])
+        session.flash('error', 'Adresse e-mail ou mot de passe incorrect.')
+        return null
+      }
+
+      throw error
+    }
   }
 }
