@@ -30,11 +30,15 @@ export default await Env.create(new URL('../', import.meta.url), {
   | Variables for configuring database connection
   |----------------------------------------------------------
   */
-  DB_HOST: Env.schema.string({ format: 'host' }),
-  DB_PORT: Env.schema.number(),
-  DB_USER: Env.schema.string(),
+  DB_HOST: Env.schema.string.optional(),
+  DB_PORT: Env.schema.number.optional(),
+  DB_USER: Env.schema.string.optional(),
   DB_PASSWORD: Env.schema.string.optional(),
-  DB_DATABASE: Env.schema.string(),
+  DB_DATABASE: Env.schema.string.optional(),
+  /**
+   * URL complète fournie par Render (remplace les 4 variables ci-dessus).
+   */
+  DATABASE_URL: Env.schema.string.optional(),
 
   /*
   |----------------------------------------------------------
@@ -46,6 +50,12 @@ export default await Env.create(new URL('../', import.meta.url), {
   MAIL_FROM_ADDRESS: Env.schema.string(),
   SMTP_HOST: Env.schema.string(),
   SMTP_PORT: Env.schema.number(),
+  /**
+   * Identifiants SMTP optionnels (requis en production avec Brevo,
+   * inutiles en local avec Mailpit).
+   */
+  SMTP_USERNAME: Env.schema.string.optional(),
+  SMTP_PASSWORD: Env.schema.string.optional(),
 
   /*
   |----------------------------------------------------------
