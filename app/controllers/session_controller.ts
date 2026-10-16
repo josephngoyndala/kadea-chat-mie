@@ -1,6 +1,8 @@
 import { errors as authErrors } from '@adonisjs/auth'
 import limiter from '@adonisjs/limiter/services/main'
+import { DateTime } from 'luxon'
 import User from '#models/user'
+import RealtimeService from '#services/realtime_service'
 import { loginValidator } from '#validators/user'
 import type { HttpContext } from '@adonisjs/core/http'
 
@@ -9,6 +11,8 @@ import type { HttpContext } from '@adonisjs/core/http'
  * formulaire, vérification des identifiants et fin de session.
  */
 export default class SessionController {
+  private realtime = new RealtimeService()
+
   /**
    * Affiche la page de connexion
    */
@@ -44,6 +48,9 @@ export default class SessionController {
     }
 
     await auth.use('web').login(user, !!remember)
+    user.lastSeenAt = DateTime.now()
+    await user.save()
+    this.realtime.userPresence(user.id, true)
 
     /**
      * Renvoie l'utilisateur vers la page qu'il voulait ouvrir avant d'être
@@ -57,9 +64,29 @@ export default class SessionController {
    * « se souvenir de moi »
    */
   async destroy({ auth, response, session }: HttpContext) {
+    const user = auth.user
+    if (user) {
+      user.lastSeenAt = null
+      await user.save()
+      this.realtime.userPresence(user.id, false)
+    }
+
     await auth.use('web').logout()
     session.flash('success', 'Vous avez été déconnecté.')
     return response.redirect().toRoute('session.create')
+  }
+
+  /**
+   * Maintient le statut en ligne de l'utilisateur actif
+   */
+  async ping({ auth, response }: HttpContext) {
+    const user = auth.user
+    if (user) {
+      user.lastSeenAt = DateTime.now()
+      await user.save()
+      this.realtime.userPresence(user.id, true)
+    }
+    return response.noContent()
   }
 
   /**

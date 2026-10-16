@@ -125,6 +125,26 @@ export default class ConversationService {
   }
 
   /**
+   * Recherche les messages d'une conversation contenant un terme,
+   * sans ceux masqués ou supprimés.
+   */
+  async search(conversation: Conversation, viewer: User, term: string) {
+    const trimmed = term.trim()
+    if (!trimmed) {
+      return []
+    }
+
+    return Message.query()
+      .where('conversation_id', conversation.id)
+      .whereNull('deleted_at')
+      .whereRaw(NOT_HIDDEN_FOR_USER, [viewer.id])
+      .whereILike('body', `%${trimmed}%`)
+      .preload('sender')
+      .orderBy('id', 'desc')
+      .limit(50)
+  }
+
+  /**
    * Démarre une conversation privée avec un autre utilisateur, ou renvoie
    * celle qui existe déjà entre eux.
    */

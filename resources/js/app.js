@@ -153,15 +153,38 @@ Alpine.data('messageBubble', function () {
  */
 Alpine.data('conversationChat', function () {
   return {
+    conversationId: null,
+    userId: null,
+    otherUserId: null,
+    isOnline: false,
+    messageUrlTemplate: '',
+    catchUpUrl: '',
     draft: '',
     sending: false,
     error: '',
     offline: false,
     unseen: 0,
+    typingUser: null,
+    typingTimer: null,
+    lastTypingSent: 0,
+    heartbeatTimer: null,
+    searchOpen: false,
+    searchQuery: '',
+    searchResults: [],
+    currentSearchIndex: -1,
+    originalMessageContents: new Map(),
 
     init() {
+      this.conversationId = this.$el.dataset.conversationId
+      this.userId = parseInt(this.$el.dataset.userId || '0', 10)
+      this.otherUserId = this.$el.dataset.otherUserId ? parseInt(this.$el.dataset.otherUserId, 10) : null
+      this.isOnline = this.$el.dataset.isOnline === '1'
+      this.messageUrlTemplate = this.$el.dataset.messageUrl || ''
+      this.catchUpUrl = this.$el.dataset.catchUpUrl || ''
+
       this.$nextTick(() => this.scrollToBottom(false))
       this.listen()
+      this.startHeartbeat()
     },
 
     get canSend() {
@@ -169,8 +192,8 @@ Alpine.data('conversationChat', function () {
     },
 
     /**
-     * Abonnement au canal temps réel de la conversation, et suivi de l'état
-     * de la connexion : à la reconnexion, on va chercher les messages manqués.
+     * Abonnement au canal temps réel de la conversation et de présence.
+     * À la reconnexion, on va chercher les messages manqués.
      */
     async listen() {
       const transmit = getTransmit()
@@ -188,18 +211,62 @@ Alpine.data('conversationChat', function () {
         this.offline = true
       })
 
-      const subscription = transmit.subscription(
-        `conversations/${this.$el.dataset.conversationId}`
-      )
-      await subscription.create()
+      // 1. Canal de la conversation (messages et indicateur de saisie)
+      if (this.conversationId) {
+        const conversationSub = transmit.subscription(
+          `conversations/${this.conversationId}`
+        )
+        await conversationSub.create()
 
-      subscription.onMessage((event) => {
-        if (event.type === 'message.created') {
-          this.onCreated(event.messageId)
-        } else if (event.type === 'message.updated') {
-          this.onUpdated(event.messageId)
+        conversationSub.onMessage((event) => {
+          if (event.type === 'message.created') {
+            this.typingUser = null
+            if (this.typingTimer) clearTimeout(this.typingTimer)
+            this.onCreated(event.messageId)
+          } else if (event.type === 'message.updated') {
+            this.onUpdated(event.messageId)
+          } else if (event.type === 'user.typing') {
+            this.onTyping(event)
+          }
+        })
+      }
+
+      // 2. Canal de présence (en ligne / hors ligne)
+      const presenceSub = transmit.subscription('presence')
+      await presenceSub.create()
+
+      presenceSub.onMessage((event) => {
+        if (event.type === 'user.presence') {
+          if (this.otherUserId && event.userId === this.otherUserId) {
+            this.isOnline = Boolean(event.isOnline)
+          }
         }
       })
+    },
+
+    /**
+     * Maintient le statut actif de l'utilisateur sur le serveur.
+     */
+    startHeartbeat() {
+      this.heartbeatTimer = setInterval(() => {
+        this.sendPing()
+      }, 45000)
+
+      window.addEventListener('beforeunload', () => {
+        if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
+      })
+    },
+
+    sendPing() {
+      const csrf = document.querySelector('meta[name="csrf-token"]')?.content
+      if (!csrf) return
+      fetch('/presence/ping', {
+        method: 'POST',
+        headers: {
+          'X-CSRF-TOKEN': csrf,
+          'X-Chat-Fetch': '1',
+        },
+      }).catch(() => {})
     },
 
     /**
@@ -207,7 +274,7 @@ Alpine.data('conversationChat', function () {
      * termine par /0, que l'on remplace par l'identifiant.
      */
     messageUrl(messageId) {
-      return this.$el.dataset.messageUrl.replace(/\/0$/, `/${messageId}`)
+      return (this.messageUrlTemplate || this.$el.dataset.messageUrl || '').replace(/\/0$/, `/${messageId}`)
     },
 
     /**
@@ -260,9 +327,10 @@ Alpine.data('conversationChat', function () {
     async catchUp() {
       const bubbles = this.$refs.messages.querySelectorAll('[data-message-id]')
       const lastId = bubbles.length > 0 ? bubbles[bubbles.length - 1].dataset.messageId : 0
+      const url = this.catchUpUrl || this.$el.dataset.catchUpUrl
 
       try {
-        const response = await fetch(`${this.$el.dataset.catchUpUrl}?after=${lastId}`, {
+        const response = await fetch(`${url}?after=${lastId}`, {
           headers: { 'X-Chat-Fetch': '1' },
         })
         if (response.ok) {
@@ -295,14 +363,172 @@ Alpine.data('conversationChat', function () {
 
     markAsRead() {
       const csrf = document.querySelector('meta[name="csrf-token"]')?.content
-      if (!csrf) return
-      fetch(`/conversations/${this.$el.dataset.conversationId}/read`, {
+      const convId = this.conversationId || this.$el.dataset.conversationId
+      if (!csrf || !convId) return
+      fetch(`/conversations/${convId}/read`, {
         method: 'POST',
         headers: {
           'X-CSRF-TOKEN': csrf,
           'X-Chat-Fetch': '1',
         },
       }).catch(() => {})
+    },
+
+    onTyping(event) {
+      if (event.userId === this.userId) {
+        return
+      }
+
+      this.typingUser = event.userName
+      if (this.typingTimer) {
+        clearTimeout(this.typingTimer)
+      }
+
+      if (this.isNearBottom()) {
+        this.$nextTick(() => this.scrollToBottom())
+      }
+
+      this.typingTimer = setTimeout(() => {
+        this.typingUser = null
+      }, 3500)
+    },
+
+    onInput() {
+      this.autosize()
+      const now = Date.now()
+      if (now - this.lastTypingSent > 2000) {
+        this.lastTypingSent = now
+        this.sendTypingSignal()
+      }
+    },
+
+    sendTypingSignal() {
+      const csrf = document.querySelector('meta[name="csrf-token"]')?.content
+      const convId = this.conversationId || this.$el.dataset.conversationId
+      if (!csrf || !convId) return
+      fetch(`/conversations/${convId}/typing`, {
+        method: 'POST',
+        headers: {
+          'X-CSRF-TOKEN': csrf,
+          'X-Chat-Fetch': '1',
+        },
+      }).catch(() => {})
+    },
+
+    toggleSearch() {
+      this.searchOpen = !this.searchOpen
+      if (this.searchOpen) {
+        this.$nextTick(() => {
+          this.$refs.searchInput?.focus()
+        })
+      } else {
+        this.closeSearch()
+      }
+    },
+
+    closeSearch() {
+      this.searchOpen = false
+      this.searchQuery = ''
+      this.clearSearchHighlights()
+      this.searchResults = []
+      this.currentSearchIndex = -1
+    },
+
+    clearSearchHighlights() {
+      for (const [el, originalText] of this.originalMessageContents.entries()) {
+        if (el && document.body.contains(el)) {
+          el.textContent = originalText
+        }
+      }
+      this.originalMessageContents.clear()
+      document.querySelectorAll('[data-search-target]').forEach((el) => {
+        el.classList.remove('ring-4', 'ring-brand/40', 'bg-brand-50/50')
+        el.removeAttribute('data-search-target')
+      })
+    },
+
+    performSearch() {
+      this.clearSearchHighlights()
+      const q = this.searchQuery.trim().toLowerCase()
+      if (!q) {
+        this.searchResults = []
+        this.currentSearchIndex = -1
+        return
+      }
+
+      const messageNodes = this.$refs.messages.querySelectorAll('[data-message-id]')
+      const matches = []
+
+      messageNodes.forEach((bubble) => {
+        const textNode = bubble.querySelector('[data-message-body]')
+        if (!textNode) return
+
+        const rawText = textNode.textContent
+        const lowerText = rawText.toLowerCase()
+
+        if (lowerText.includes(q)) {
+          if (!this.originalMessageContents.has(textNode)) {
+            this.originalMessageContents.set(textNode, rawText)
+          }
+
+          const regex = new RegExp(`(${this.escapeRegex(q)})`, 'gi')
+          textNode.innerHTML = this.escapeHtml(rawText).replace(
+            regex,
+            '<mark class="bg-amber-200 text-ink rounded px-0.5 font-semibold">$1</mark>'
+          )
+
+          matches.push(bubble)
+        }
+      })
+
+      this.searchResults = matches
+      if (matches.length > 0) {
+        this.currentSearchIndex = matches.length - 1
+        this.highlightCurrentMatch()
+      } else {
+        this.currentSearchIndex = -1
+      }
+    },
+
+    nextSearchResult() {
+      if (this.searchResults.length === 0) return
+      this.currentSearchIndex = (this.currentSearchIndex + 1) % this.searchResults.length
+      this.highlightCurrentMatch()
+    },
+
+    prevSearchResult() {
+      if (this.searchResults.length === 0) return
+      this.currentSearchIndex =
+        (this.currentSearchIndex - 1 + this.searchResults.length) % this.searchResults.length
+      this.highlightCurrentMatch()
+    },
+
+    highlightCurrentMatch() {
+      document.querySelectorAll('[data-search-target]').forEach((el) => {
+        el.classList.remove('ring-4', 'ring-brand/40', 'bg-brand-50/50')
+        el.removeAttribute('data-search-target')
+      })
+
+      const target = this.searchResults[this.currentSearchIndex]
+      if (!target) return
+
+      target.setAttribute('data-search-target', '1')
+      target.classList.add('ring-4', 'ring-brand/40', 'bg-brand-50/50', 'transition-all', 'duration-300', 'rounded-2xl')
+
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    },
+
+    escapeHtml(str) {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;')
+    },
+
+    escapeRegex(str) {
+      return str.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')
     },
 
     /**
@@ -388,6 +614,8 @@ Alpine.data('conversationChat', function () {
 
       this.sending = true
       this.error = ''
+      this.typingUser = null
+      if (this.typingTimer) clearTimeout(this.typingTimer)
 
       try {
         const response = await postToServer(event.target)
