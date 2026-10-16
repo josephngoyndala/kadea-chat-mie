@@ -5,16 +5,15 @@ const limiterConfig = defineConfig({
   default: env.get('LIMITER_STORE'),
   stores: {
     /**
-     * Database store to save rate limiting data inside a
-     * MYSQL or PostgreSQL database.
+     * Magasin en base de données : les compteurs survivent aux redémarrages
+     * de l'application.
      */
     database: stores.database({
       tableName: 'rate_limits',
     }),
 
     /**
-     * Memory store could be used during
-     * testing
+     * Magasin en mémoire : utilisé pendant les tests automatiques.
      */
     memory: stores.memory({}),
   },
