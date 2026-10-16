@@ -168,6 +168,11 @@ Alpine.data('conversationChat', function () {
     typingTimer: null,
     lastTypingSent: 0,
     heartbeatTimer: null,
+    searchOpen: false,
+    searchQuery: '',
+    searchResults: [],
+    currentSearchIndex: -1,
+    originalMessageContents: new Map(),
 
     init() {
       this.conversationId = this.$el.dataset.conversationId
@@ -408,6 +413,122 @@ Alpine.data('conversationChat', function () {
           'X-Chat-Fetch': '1',
         },
       }).catch(() => {})
+    },
+
+    toggleSearch() {
+      this.searchOpen = !this.searchOpen
+      if (this.searchOpen) {
+        this.$nextTick(() => {
+          this.$refs.searchInput?.focus()
+        })
+      } else {
+        this.closeSearch()
+      }
+    },
+
+    closeSearch() {
+      this.searchOpen = false
+      this.searchQuery = ''
+      this.clearSearchHighlights()
+      this.searchResults = []
+      this.currentSearchIndex = -1
+    },
+
+    clearSearchHighlights() {
+      for (const [el, originalText] of this.originalMessageContents.entries()) {
+        if (el && document.body.contains(el)) {
+          el.textContent = originalText
+        }
+      }
+      this.originalMessageContents.clear()
+      document.querySelectorAll('[data-search-target]').forEach((el) => {
+        el.classList.remove('ring-4', 'ring-brand/40', 'bg-brand-50/50')
+        el.removeAttribute('data-search-target')
+      })
+    },
+
+    performSearch() {
+      this.clearSearchHighlights()
+      const q = this.searchQuery.trim().toLowerCase()
+      if (!q) {
+        this.searchResults = []
+        this.currentSearchIndex = -1
+        return
+      }
+
+      const messageNodes = this.$refs.messages.querySelectorAll('[data-message-id]')
+      const matches = []
+
+      messageNodes.forEach((bubble) => {
+        const textNode = bubble.querySelector('[data-message-body]')
+        if (!textNode) return
+
+        const rawText = textNode.textContent
+        const lowerText = rawText.toLowerCase()
+
+        if (lowerText.includes(q)) {
+          if (!this.originalMessageContents.has(textNode)) {
+            this.originalMessageContents.set(textNode, rawText)
+          }
+
+          const regex = new RegExp(`(${this.escapeRegex(q)})`, 'gi')
+          textNode.innerHTML = this.escapeHtml(rawText).replace(
+            regex,
+            '<mark class="bg-amber-200 text-ink rounded px-0.5 font-semibold">$1</mark>'
+          )
+
+          matches.push(bubble)
+        }
+      })
+
+      this.searchResults = matches
+      if (matches.length > 0) {
+        this.currentSearchIndex = matches.length - 1
+        this.highlightCurrentMatch()
+      } else {
+        this.currentSearchIndex = -1
+      }
+    },
+
+    nextSearchResult() {
+      if (this.searchResults.length === 0) return
+      this.currentSearchIndex = (this.currentSearchIndex + 1) % this.searchResults.length
+      this.highlightCurrentMatch()
+    },
+
+    prevSearchResult() {
+      if (this.searchResults.length === 0) return
+      this.currentSearchIndex =
+        (this.currentSearchIndex - 1 + this.searchResults.length) % this.searchResults.length
+      this.highlightCurrentMatch()
+    },
+
+    highlightCurrentMatch() {
+      document.querySelectorAll('[data-search-target]').forEach((el) => {
+        el.classList.remove('ring-4', 'ring-brand/40', 'bg-brand-50/50')
+        el.removeAttribute('data-search-target')
+      })
+
+      const target = this.searchResults[this.currentSearchIndex]
+      if (!target) return
+
+      target.setAttribute('data-search-target', '1')
+      target.classList.add('ring-4', 'ring-brand/40', 'bg-brand-50/50', 'transition-all', 'duration-300', 'rounded-2xl')
+
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    },
+
+    escapeHtml(str) {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;')
+    },
+
+    escapeRegex(str) {
+      return str.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')
     },
 
     /**

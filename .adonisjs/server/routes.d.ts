@@ -27,6 +27,7 @@ export type ScannedRoutes = {
     'conversations.card': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'conversations.read': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'conversations.typing': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'conversations.search': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'conversations.store': { paramsTuple?: []; params?: {} }
     'groups.create': { paramsTuple?: []; params?: {} }
     'groups.store': { paramsTuple?: []; params?: {} }
@@ -58,6 +59,7 @@ export type ScannedRoutes = {
     'dashboard': { paramsTuple?: []; params?: {} }
     'conversations.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'conversations.card': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'conversations.search': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'groups.create': { paramsTuple?: []; params?: {} }
     'group_members.index': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
     'messages.index': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
@@ -78,6 +80,7 @@ export type ScannedRoutes = {
     'dashboard': { paramsTuple?: []; params?: {} }
     'conversations.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'conversations.card': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'conversations.search': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'groups.create': { paramsTuple?: []; params?: {} }
     'group_members.index': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
     'messages.index': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }

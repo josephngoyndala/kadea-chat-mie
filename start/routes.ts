@@ -62,6 +62,9 @@ router
     router
       .post('conversations/:id/typing', [controllers.Conversations, 'typing'])
       .where('id', router.matchers.number())
+    router
+      .get('conversations/:id/search', [controllers.Conversations, 'search'])
+      .where('id', router.matchers.number())
     router.post('conversations', [controllers.Conversations, 'store'])
 
     router.get('groups/new', [controllers.Groups, 'create'])

@@ -116,6 +116,28 @@ export default class ConversationsController {
   }
 
   /**
+   * Recherche des messages dans une conversation
+   */
+  async search({ auth, params, request, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conversationId = Number(params.id)
+
+    const conversation = await this.conversations.findForMember(user, conversationId)
+    const term = String(request.input('q', '')).trim()
+
+    const results = await this.conversations.search(conversation, user, term)
+
+    return response.json(
+      results.map((msg) => ({
+        id: msg.id,
+        body: msg.body,
+        time: msg.createdAt.toFormat('HH:mm'),
+        senderName: msg.sender?.fullName ?? msg.sender?.email,
+      }))
+    )
+  }
+
+  /**
    * Démarre une conversation privée (ou ouvre celle qui existe déjà)
    */
   async store({ auth, request, response, session }: HttpContext) {

@@ -67,7 +67,86 @@
             </p>
           @end
         </div>
+
+        {{-- Actions d'en-tête : Bouton Recherche style WhatsApp --}}
+        <div class="flex items-center gap-1 flex-none">
+          <button
+            type="button"
+            x-on:click="toggleSearch()"
+            aria-label="Rechercher dans la discussion"
+            title="Rechercher dans la discussion"
+            class="grid size-10 place-items-center rounded-full text-muted transition hover:bg-paper hover:text-ink cursor-pointer"
+          >
+            @svg('lucide:search', { width: 19, height: 19 })
+          </button>
+        </div>
       </header>
+
+      {{-- Barre de recherche intégrée style WhatsApp --}}
+      <div
+        x-show="searchOpen"
+        x-cloak
+        x-transition
+        class="flex flex-none items-center gap-2 border-b border-line bg-white/95 backdrop-blur px-3 py-2 sm:px-4 shadow-sm"
+      >
+        <span class="grid size-8 place-items-center text-muted flex-none">
+          @svg('lucide:search', { width: 16, height: 16 })
+        </span>
+        <input
+          type="search"
+          x-ref="searchInput"
+          x-model="searchQuery"
+          x-on:input="performSearch()"
+          x-on:keydown.escape="closeSearch()"
+          x-on:keydown.enter.prevent="nextSearchResult()"
+          placeholder="Rechercher dans cette discussion…"
+          class="h-9 min-w-0 flex-1 rounded-xl border border-line bg-paper/80 px-3 text-xs font-medium outline-none transition placeholder:text-muted focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/15"
+        />
+
+        {{-- Compteur et navigation --}}
+        <div
+          x-show="searchQuery.trim().length > 0"
+          x-cloak
+          class="flex items-center gap-1 flex-none"
+        >
+          <span
+            class="text-xs font-bold px-1.5 py-0.5 rounded-md"
+            :class="searchResults.length > 0 ? 'text-ink bg-paper' : 'text-rose-600 bg-rose-50'"
+            x-text="searchResults.length > 0 ? (currentSearchIndex + 1) + ' / ' + searchResults.length : '0 résultat'"
+          ></span>
+
+          <button
+            type="button"
+            x-on:click="prevSearchResult()"
+            :disabled="searchResults.length === 0"
+            aria-label="Résultat précédent"
+            title="Précédent"
+            class="grid size-8 place-items-center rounded-lg border border-line bg-white text-ink transition hover:bg-paper disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+          >
+            @svg('lucide:chevron-up', { width: 15, height: 15 })
+          </button>
+          <button
+            type="button"
+            x-on:click="nextSearchResult()"
+            :disabled="searchResults.length === 0"
+            aria-label="Résultat suivant"
+            title="Suivant"
+            class="grid size-8 place-items-center rounded-lg border border-line bg-white text-ink transition hover:bg-paper disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+          >
+            @svg('lucide:chevron-down', { width: 15, height: 15 })
+          </button>
+        </div>
+
+        <button
+          type="button"
+          x-on:click="closeSearch()"
+          aria-label="Fermer la recherche"
+          title="Fermer"
+          class="grid size-8 place-items-center rounded-lg text-muted hover:bg-paper hover:text-ink cursor-pointer flex-none"
+        >
+          @svg('lucide:x', { width: 16, height: 16 })
+        </button>
+      </div>
 
       {{-- Messages --}}
       <div class="relative flex min-h-0 flex-1 flex-col">
