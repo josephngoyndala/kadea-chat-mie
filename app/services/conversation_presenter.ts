@@ -14,6 +14,7 @@ export type ConversationCard = {
   preview: string
   time: string
   isGroup: boolean
+  unreadCount: number
 }
 
 export type ConversationHeader = {
@@ -70,7 +71,7 @@ export default class ConversationPresenter {
    */
   async cards(items: ConversationWithLastMessage[], viewer: User): Promise<ConversationCard[]> {
     return Promise.all(
-      items.map(async ({ conversation, lastMessage }) => {
+      items.map(async ({ conversation, lastMessage, unreadCount }) => {
         const identity = await this.identity(conversation, viewer)
 
         return {
@@ -79,6 +80,7 @@ export default class ConversationPresenter {
           preview: this.previewOf(lastMessage, viewer, this.showsAuthors(conversation)),
           time: lastMessage ? formatListDate(lastMessage.createdAt) : '',
           isGroup: conversation.type === 'group',
+          unreadCount: unreadCount ?? 0,
         }
       })
     )

@@ -62,31 +62,43 @@
       </button>
     </div>
 
-    {{-- Filtres rapides style WhatsApp : Toutes, Groupes, Directes --}}
+    {{-- Filtres rapides style WhatsApp : Toutes, Directes, Groupes --}}
     <div class="mt-2.5 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
       <button
         type="button"
         x-on:click="filter = 'all'"
         :class="filter === 'all' ? 'bg-ink text-white font-bold shadow-sm' : 'bg-paper text-muted hover:text-ink hover:bg-paper/80 font-medium'"
-        class="rounded-full px-3 py-1 text-xs transition whitespace-nowrap cursor-pointer"
+        class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition whitespace-nowrap cursor-pointer"
       >
-        Toutes
-      </button>
-      <button
-        type="button"
-        x-on:click="filter = 'groups'"
-        :class="filter === 'groups' ? 'bg-ink text-white font-bold shadow-sm' : 'bg-paper text-muted hover:text-ink hover:bg-paper/80 font-medium'"
-        class="rounded-full px-3 py-1 text-xs transition whitespace-nowrap cursor-pointer"
-      >
-        Groupes
+        <span>Toutes</span>
       </button>
       <button
         type="button"
         x-on:click="filter = 'direct'"
         :class="filter === 'direct' ? 'bg-ink text-white font-bold shadow-sm' : 'bg-paper text-muted hover:text-ink hover:bg-paper/80 font-medium'"
-        class="rounded-full px-3 py-1 text-xs transition whitespace-nowrap cursor-pointer"
+        class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition whitespace-nowrap cursor-pointer"
       >
-        Directes
+        <span>Directes</span>
+        <span
+          x-show="unreadDirectCount > 0"
+          x-cloak
+          x-text="unreadDirectCount > 99 ? '99+' : unreadDirectCount"
+          class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-bold text-white shadow-sm"
+        ></span>
+      </button>
+      <button
+        type="button"
+        x-on:click="filter = 'groups'"
+        :class="filter === 'groups' ? 'bg-ink text-white font-bold shadow-sm' : 'bg-paper text-muted hover:text-ink hover:bg-paper/80 font-medium'"
+        class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition whitespace-nowrap cursor-pointer"
+      >
+        <span>Groupes</span>
+        <span
+          x-show="unreadGroupCount > 0"
+          x-cloak
+          x-text="unreadGroupCount > 99 ? '99+' : unreadGroupCount"
+          class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-bold text-white shadow-sm"
+        ></span>
       </button>
     </div>
   </div>

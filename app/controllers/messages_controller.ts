@@ -78,6 +78,7 @@ export default class MessagesController {
     const { body } = await request.validateUsing(sendMessageValidator)
 
     const { message, startsNewDay } = await this.messages.send(user, conversation, body)
+    await this.conversations.markAsRead(conversation.id, user.id)
     this.realtime.messageCreated(conversation, message)
 
     if (!this.wantsFragment(request)) {

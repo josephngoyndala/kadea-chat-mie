@@ -3,12 +3,14 @@
 @let(cardAvatarUrl = $props.get('avatarUrl'))
 @let(isActive = $props.get('active', false))
 @let(isGroup = $props.get('isGroup', false))
+@let(unreadCount = Number($props.get('unreadCount', 0)))
 
 {{-- La carte entière ouvre la discussion (lien étiré), sauf la photo, qui s'agrandit. --}}
 <li
   data-conversation-id="{{ cardId }}"
   data-title="{{ cardTitle }}"
   data-is-group="{{ isGroup ? '1' : '0' }}"
+  data-unread-count="{{ unreadCount }}"
   class="relative flex items-center gap-3 px-4 py-3 transition {{ isActive ? 'bg-brand-50' : 'hover:bg-paper' }}"
 >
   <div class="relative z-10 flex-none">
@@ -31,10 +33,21 @@
             @svg('lucide:users', { width: 14, height: 14 })
           </span>
         @end
-        <span class="truncate text-[15px] font-bold text-ink">{{ cardTitle }}</span>
+        <span class="truncate text-[15px] {{ unreadCount > 0 ? 'font-extrabold text-ink' : 'font-bold text-ink' }}">{{ cardTitle }}</span>
       </span>
-      <span class="flex-none text-xs text-muted">{{ $props.get('time') }}</span>
+      <span class="flex-none text-xs {{ unreadCount > 0 ? 'font-bold text-brand' : 'text-muted' }}">{{ $props.get('time') }}</span>
     </span>
-    <span class="truncate text-sm text-muted">{{ $props.get('preview') }}</span>
+
+    <span class="flex items-center justify-between gap-2">
+      <span class="truncate text-sm {{ unreadCount > 0 ? 'font-semibold text-ink' : 'text-muted' }}">{{ $props.get('preview') }}</span>
+      @if(unreadCount > 0)
+        <span
+          data-badge
+          class="flex h-5 min-w-5 flex-none items-center justify-center rounded-full bg-brand px-1.5 text-[11px] font-bold text-white shadow-brand ring-2 ring-white animate-in zoom-in-50 duration-200"
+        >
+          {{ unreadCount > 99 ? '99+' : unreadCount }}
+        </span>
+      @end
+    </span>
   </a>
 </li>
