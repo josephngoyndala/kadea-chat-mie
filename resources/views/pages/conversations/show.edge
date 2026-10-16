@@ -1,7 +1,7 @@
 @layouts.messenger({ title: header.title })
-  <div class="flex min-h-0 flex-1">
+  <div class="flex min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden">
     {{-- Liste : visible à côté de la discussion à partir de 1024 px --}}
-    <aside class="hidden min-h-0 w-[380px] flex-none flex-col border-r border-line lg:flex">
+    <aside class="hidden min-h-0 w-[380px] max-w-full flex-none flex-col border-r border-line lg:flex">
       @include('partials/conversation_list')
     </aside>
 

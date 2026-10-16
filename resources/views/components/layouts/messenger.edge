@@ -11,17 +11,17 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @stack('dumper')
   </head>
-  <body class="h-dvh overflow-hidden bg-paper">
-    <div class="flex h-dvh flex-col">
+  <body class="h-dvh max-w-full overflow-hidden bg-paper">
+    <div class="flex h-dvh w-full max-w-full flex-col overflow-hidden">
       {{-- En-tête global : à partir de 640 px seulement --}}
       <div class="hidden flex-none sm:block">
         @include('partials/app_header')
       </div>
 
-      <main class="flex min-h-0 flex-1 flex-col">{{{ await $slots.main() }}}</main>
+      <main class="flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden">{{{ await $slots.main() }}}</main>
 
       @if(withBottomNav)
-        <div class="flex-none sm:hidden">
+        <div class="w-full max-w-full flex-none sm:hidden">
           @include('partials/app_bottom_nav')
         </div>
       @end

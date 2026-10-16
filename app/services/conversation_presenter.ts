@@ -13,6 +13,7 @@ export type ConversationCard = {
   avatarUrl: string | null
   preview: string
   time: string
+  isGroup: boolean
 }
 
 export type ConversationHeader = {
@@ -77,6 +78,7 @@ export default class ConversationPresenter {
           ...identity,
           preview: this.previewOf(lastMessage, viewer, this.showsAuthors(conversation)),
           time: lastMessage ? formatListDate(lastMessage.createdAt) : '',
+          isGroup: conversation.type === 'group',
         }
       })
     )

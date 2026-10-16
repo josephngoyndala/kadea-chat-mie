@@ -487,6 +487,9 @@ Alpine.data('conversationChat', function () {
  */
 Alpine.data('conversationList', function () {
   return {
+    search: '',
+    filter: 'all',
+
     async init() {
       const subscription = getTransmit().subscription(`users/${this.$el.dataset.userId}`)
       await subscription.create()
@@ -496,6 +499,40 @@ Alpine.data('conversationList', function () {
           this.refreshCard(event.conversationId)
         }
       })
+    },
+
+    applyFilter() {
+      if (!this.$refs.items) return
+      const cards = this.$refs.items.querySelectorAll('[data-conversation-id]')
+      const q = (this.search || '').trim().toLowerCase()
+      let visibleCount = 0
+
+      cards.forEach((card) => {
+        const title = (card.dataset.title || card.textContent || '').toLowerCase()
+        const isGroup = card.dataset.isGroup === '1'
+
+        let matchesSearch = !q || title.includes(q)
+        let matchesFilter = true
+        if (this.filter === 'groups') matchesFilter = isGroup
+        if (this.filter === 'direct') matchesFilter = !isGroup
+
+        if (matchesSearch && matchesFilter) {
+          card.classList.remove('hidden')
+          visibleCount++
+        } else {
+          card.classList.add('hidden')
+        }
+      })
+
+      if (this.$refs.noMatch) {
+        if (visibleCount === 0 && cards.length > 0) {
+          this.$refs.noMatch.classList.remove('hidden')
+          this.$refs.noMatch.classList.add('flex')
+        } else {
+          this.$refs.noMatch.classList.remove('flex')
+          this.$refs.noMatch.classList.add('hidden')
+        }
+      }
     },
 
     async refreshCard(conversationId) {
@@ -528,6 +565,7 @@ Alpine.data('conversationList', function () {
         items.classList.remove('hidden')
         items.classList.add('min-h-0', 'flex-1')
         this.$el.querySelector('[data-list-empty]')?.remove()
+        this.applyFilter()
       } catch {
         // Réseau coupé : la liste sera à jour au prochain chargement.
       }
@@ -539,6 +577,7 @@ Alpine.data('conversationList', function () {
      */
     removeCard(conversationId) {
       this.$refs.items.querySelector(`[data-conversation-id="${conversationId}"]`)?.remove()
+      this.applyFilter()
 
       if (String(conversationId) === this.$el.dataset.activeId) {
         window.location.assign(this.$el.dataset.dashboardUrl)
