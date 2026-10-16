@@ -30,8 +30,11 @@ export default class ConversationsController {
    */
   async show({ auth, params, view }: HttpContext) {
     const user = auth.getUserOrFail()
+    const conversationId = Number(params.id)
 
-    const conversation = await this.conversations.findForMember(user, Number(params.id))
+    const conversation = await this.conversations.findForMember(user, conversationId)
+    await this.conversations.markAsRead(conversation.id, user.id)
+
     const [items, messages] = await Promise.all([
       this.conversations.listFor(user),
       this.conversations.history(conversation, user),
@@ -56,15 +59,41 @@ export default class ConversationsController {
    */
   async card({ auth, params, request, view }: HttpContext) {
     const user = auth.getUserOrFail()
+    const conversationId = Number(params.id)
 
-    const conversation = await this.conversations.findForMember(user, Number(params.id))
+    const conversation = await this.conversations.findForMember(user, conversationId)
+    const isActive = conversation.id === Number(request.input('active'))
+
+    if (isActive) {
+      await this.conversations.markAsRead(conversation.id, user.id)
+    }
+
     const lastMessage = await this.conversations.lastMessageOf(conversation, user)
-    const [item] = await this.presenter.cards([{ conversation, lastMessage }], user)
+    const unreadMap = await this.conversations.unreadCountsFor([conversation.id], user)
+    const unreadCount = isActive ? 0 : (unreadMap.get(conversation.id) ?? 0)
+
+    const [item] = await this.presenter.cards(
+      [{ conversation, lastMessage, unreadCount }],
+      user
+    )
 
     return view.render('fragments/conversation_card', {
       item,
-      active: item.id === Number(request.input('active')),
+      active: isActive,
     })
+  }
+
+  /**
+   * Marque la conversation comme lue par l'utilisateur connecté
+   */
+  async read({ auth, params, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conversationId = Number(params.id)
+
+    const conversation = await this.conversations.findForMember(user, conversationId)
+    await this.conversations.markAsRead(conversation.id, user.id)
+
+    return response.noContent()
   }
 
   /**

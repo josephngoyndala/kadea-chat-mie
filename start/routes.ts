@@ -55,6 +55,9 @@ router
     router
       .get('conversations/:id/card', [controllers.Conversations, 'card'])
       .where('id', router.matchers.number())
+    router
+      .post('conversations/:id/read', [controllers.Conversations, 'read'])
+      .where('id', router.matchers.number())
     router.post('conversations', [controllers.Conversations, 'store'])
 
     router.get('groups/new', [controllers.Groups, 'create'])

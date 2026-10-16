@@ -287,9 +287,22 @@ Alpine.data('conversationChat', function () {
 
       if (followNewMessages) {
         this.scrollToBottom()
+        this.markAsRead()
       } else {
         this.unseen += inserted
       }
+    },
+
+    markAsRead() {
+      const csrf = document.querySelector('meta[name="csrf-token"]')?.content
+      if (!csrf) return
+      fetch(`/conversations/${this.$el.dataset.conversationId}/read`, {
+        method: 'POST',
+        headers: {
+          'X-CSRF-TOKEN': csrf,
+          'X-Chat-Fetch': '1',
+        },
+      }).catch(() => {})
     },
 
     /**
@@ -487,7 +500,14 @@ Alpine.data('conversationChat', function () {
  */
 Alpine.data('conversationList', function () {
   return {
+    search: '',
+    filter: 'all',
+    unreadDirectCount: 0,
+    unreadGroupCount: 0,
+
     async init() {
+      this.updateUnreadCounts()
+
       const subscription = getTransmit().subscription(`users/${this.$el.dataset.userId}`)
       await subscription.create()
 
@@ -496,6 +516,63 @@ Alpine.data('conversationList', function () {
           this.refreshCard(event.conversationId)
         }
       })
+    },
+
+    updateUnreadCounts() {
+      if (!this.$refs.items) return
+      let direct = 0
+      let group = 0
+
+      this.$refs.items.querySelectorAll('[data-conversation-id]').forEach((card) => {
+        const count = parseInt(card.dataset.unreadCount || '0', 10)
+        const isGroup = card.dataset.isGroup === '1'
+        if (count > 0) {
+          if (isGroup) {
+            group += count
+          } else {
+            direct += count
+          }
+        }
+      })
+
+      this.unreadDirectCount = direct
+      this.unreadGroupCount = group
+    },
+
+    applyFilter() {
+      if (!this.$refs.items) return
+      const cards = this.$refs.items.querySelectorAll('[data-conversation-id]')
+      const q = (this.search || '').trim().toLowerCase()
+      let visibleCount = 0
+
+      cards.forEach((card) => {
+        const title = (card.dataset.title || card.textContent || '').toLowerCase()
+        const isGroup = card.dataset.isGroup === '1'
+
+        let matchesSearch = !q || title.includes(q)
+        let matchesFilter = true
+        if (this.filter === 'groups') matchesFilter = isGroup
+        if (this.filter === 'direct') matchesFilter = !isGroup
+
+        if (matchesSearch && matchesFilter) {
+          card.classList.remove('hidden')
+          visibleCount++
+        } else {
+          card.classList.add('hidden')
+        }
+      })
+
+      if (this.$refs.noMatch) {
+        if (visibleCount === 0 && cards.length > 0) {
+          this.$refs.noMatch.classList.remove('hidden')
+          this.$refs.noMatch.classList.add('flex')
+        } else {
+          this.$refs.noMatch.classList.remove('flex')
+          this.$refs.noMatch.classList.add('hidden')
+        }
+      }
+
+      this.updateUnreadCounts()
     },
 
     async refreshCard(conversationId) {
@@ -522,12 +599,28 @@ Alpine.data('conversationList', function () {
         }
 
         const items = this.$refs.items
-        items.querySelector(`[data-conversation-id="${conversationId}"]`)?.remove()
+        const existing = items.querySelector(`[data-conversation-id="${conversationId}"]`)
+        const hadUnread = existing ? parseInt(existing.dataset.unreadCount || '0', 10) : 0
+        const hasUnread = parseInt(card.dataset.unreadCount || '0', 10)
+
+        existing?.remove()
         items.prepend(card)
+
+        // Signal visuel instantané aux yeux si un nouveau message arrive
+        if (hasUnread > hadUnread) {
+          card.classList.add('bg-brand-50/80', 'transition-colors', 'duration-700')
+          setTimeout(() => {
+            if (card.dataset.conversationId !== this.$el.dataset.activeId) {
+              card.classList.remove('bg-brand-50/80')
+            }
+          }, 2500)
+        }
 
         items.classList.remove('hidden')
         items.classList.add('min-h-0', 'flex-1')
         this.$el.querySelector('[data-list-empty]')?.remove()
+        this.applyFilter()
+        this.updateUnreadCounts()
       } catch {
         // Réseau coupé : la liste sera à jour au prochain chargement.
       }
@@ -539,6 +632,8 @@ Alpine.data('conversationList', function () {
      */
     removeCard(conversationId) {
       this.$refs.items.querySelector(`[data-conversation-id="${conversationId}"]`)?.remove()
+      this.applyFilter()
+      this.updateUnreadCounts()
 
       if (String(conversationId) === this.$el.dataset.activeId) {
         window.location.assign(this.$el.dataset.dashboardUrl)
