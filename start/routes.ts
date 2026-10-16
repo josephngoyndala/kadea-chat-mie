@@ -9,6 +9,7 @@
 
 import transmit from '@adonisjs/transmit/services/main'
 import { middleware } from '#start/kernel'
+import { messageThrottle, sensitiveThrottle } from '#start/limiter'
 import { controllers } from '#generated/controllers'
 import router from '@adonisjs/core/services/router'
 
@@ -25,17 +26,19 @@ router.on('/').render('pages/home').as('home')
 router
   .group(() => {
     router.get('signup', [controllers.NewAccount, 'create'])
-    router.post('signup', [controllers.NewAccount, 'store'])
+    router.post('signup', [controllers.NewAccount, 'store']).use(sensitiveThrottle)
 
     router.get('login', [controllers.Session, 'create'])
     router.post('login', [controllers.Session, 'store'])
 
     router.get('email/verification', [controllers.EmailVerification, 'notice'])
     router.get('email/verify/:token', [controllers.EmailVerification, 'verify'])
-    router.post('email/verification/resend', [controllers.EmailVerification, 'resend'])
+    router
+      .post('email/verification/resend', [controllers.EmailVerification, 'resend'])
+      .use(sensitiveThrottle)
 
     router.get('forgot-password', [controllers.PasswordReset, 'create'])
-    router.post('forgot-password', [controllers.PasswordReset, 'store'])
+    router.post('forgot-password', [controllers.PasswordReset, 'store']).use(sensitiveThrottle)
     router.get('reset-password/:token', [controllers.PasswordReset, 'edit'])
     router.post('reset-password/:token', [controllers.PasswordReset, 'update'])
   })
@@ -81,6 +84,7 @@ router
     router
       .post('conversations/:conversationId/messages', [controllers.Messages, 'store'])
       .where('conversationId', router.matchers.number())
+      .use(messageThrottle)
     router
       .post('conversations/:conversationId/messages/:messageId/edit', [
         controllers.Messages,

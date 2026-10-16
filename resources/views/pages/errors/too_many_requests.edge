@@ -1,0 +1,21 @@
+@layouts.marketing({ title: 'Trop de tentatives' })
+  <section class="grid min-h-screen place-items-center px-6 pb-16 pt-28">
+    <div class="flex max-w-lg flex-col items-center text-center">
+      <span class="grid size-16 place-items-center rounded-2xl bg-brand-50 text-brand">
+        @svg('lucide:timer', { width: 28, height: 28 })
+      </span>
+      <p class="mt-6 text-sm font-bold uppercase tracking-[0.2em] text-brand">Erreur 429</p>
+      <h1 class="mt-3 text-3xl font-extrabold tracking-tight sm:text-4xl">
+        Trop de tentatives.
+      </h1>
+      <p class="mt-4 text-lg leading-relaxed text-muted">
+        Pour protéger les comptes, cette action est temporairement limitée. Réessayez dans {{ waitMinutes }} minute{{ waitMinutes > 1 ? 's' : '' }}.
+      </p>
+      <div class="mt-10">
+        @button({ route: 'home', arrow: true })
+          Retour à l'accueil
+        @end
+      </div>
+    </div>
+  </section>
+@end

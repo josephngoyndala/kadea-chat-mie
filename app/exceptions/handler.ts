@@ -1,6 +1,7 @@
 import app from '@adonisjs/core/services/app'
 import { type HttpContext, ExceptionHandler } from '@adonisjs/core/http'
 import type { StatusPageRange, StatusPageRenderer } from '@adonisjs/core/types/http'
+import { errors as limiterErrors } from '@adonisjs/limiter'
 
 export default class HttpExceptionHandler extends ExceptionHandler {
   /**
@@ -42,6 +43,27 @@ export default class HttpExceptionHandler extends ExceptionHandler {
     if (this.isRouteNotFound(error)) {
       const html = await ctx.view.render('pages/errors/not_found', { error })
       return ctx.response.status(404).send(html)
+    }
+
+    /**
+     * Trop de requêtes : une page claire pour les pages, et un message JSON
+     * que la messagerie affiche telle quelle (elle sait lire ce format).
+     */
+    if (error instanceof limiterErrors.E_TOO_MANY_REQUESTS) {
+      for (const [name, value] of Object.entries(error.getDefaultHeaders())) {
+        ctx.response.header(name, String(value))
+      }
+
+      if (ctx.request.header('x-chat-fetch') === '1') {
+        return ctx.response.status(422).json({
+          errors: [{ message: 'Trop de requêtes. Patientez un instant avant de réessayer.' }],
+        })
+      }
+
+      const html = await ctx.view.render('pages/errors/too_many_requests', {
+        waitMinutes: Math.max(1, Math.ceil(error.response.availableIn / 60)),
+      })
+      return ctx.response.status(429).send(html)
     }
 
     return super.handle(error, ctx)
