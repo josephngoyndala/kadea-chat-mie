@@ -28,14 +28,19 @@ const mailConfig = defineConfig({
       host: env.get('SMTP_HOST'),
       port: env.get('SMTP_PORT'),
       /**
-       * À décommenter quand le serveur SMTP demande une authentification
-       * (ce sera le cas du service d'envoi en production).
+       * Auth SMTP activée pour Brevo (et tout service d'envoi en production).
+       * En local, SMTP_USERNAME et SMTP_PASSWORD peuvent être omis :
+       * Mailpit n'en a pas besoin.
        */
-      /* auth: {
-        type: 'login',
-        user: env.get('SMTP_USERNAME'),
-        pass: env.get('SMTP_PASSWORD'),
-      }, */
+      ...(env.get('SMTP_USERNAME')
+        ? {
+            auth: {
+              type: 'login' as const,
+              user: env.get('SMTP_USERNAME')!,
+              pass: env.get('SMTP_PASSWORD')!,
+            },
+          }
+        : {}),
     }),
   },
 })
