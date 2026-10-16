@@ -29,7 +29,7 @@ router
     router.post('signup', [controllers.NewAccount, 'store']).use(sensitiveThrottle)
 
     router.get('login', [controllers.Session, 'create'])
-    router.post('login', [controllers.Session, 'store'])
+    router.post('login', [controllers.Session, 'store']).use(sensitiveThrottle)
 
     router.get('email/verification', [controllers.EmailVerification, 'notice'])
     router.get('email/verify/:token', [controllers.EmailVerification, 'verify'])
