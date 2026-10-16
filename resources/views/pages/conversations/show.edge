@@ -9,7 +9,10 @@
       class="flex min-h-0 min-w-0 flex-1 flex-col bg-paper"
       x-data="conversationChat"
       x-on:submit="handleSubmit($event)"
+      data-user-id="{{ auth?.user?.id }}"
       data-conversation-id="{{ activeId }}"
+      data-other-user-id="{{ header.otherUserId ?? '' }}"
+      data-is-online="{{ header.isOnline ? '1' : '0' }}"
       data-message-url="{{ urlFor('messages.show', { conversationId: activeId, messageId: '0' }) }}"
       data-catch-up-url="{{ urlFor('messages.index', { conversationId: activeId }) }}"
     >
@@ -32,12 +35,36 @@
           @if(header.isGroup)
             <a href="{{ urlFor('group_members.index', { conversationId: activeId }) }}" class="block min-w-0">
               <h1 class="truncate text-base font-bold tracking-tight">{{ header.title }}</h1>
-              <p class="truncate text-xs text-muted">
+              <p x-show="!typingUser" class="truncate text-xs text-muted">
                 {{ header.memberCount }} membre{{ header.memberCount > 1 ? 's' : '' }} · Appuyez pour voir le groupe
+              </p>
+              <p x-show="typingUser" x-cloak class="truncate text-xs font-bold text-brand flex items-center gap-1.5">
+                <span class="inline-flex gap-0.5">
+                  <span class="size-1 rounded-full bg-brand animate-bounce [animation-delay:-0.3s]"></span>
+                  <span class="size-1 rounded-full bg-brand animate-bounce [animation-delay:-0.15s]"></span>
+                  <span class="size-1 rounded-full bg-brand animate-bounce"></span>
+                </span>
+                <span x-text="typingUser + ' est en train d’écrire…'"></span>
               </p>
             </a>
           @else
             <h1 class="truncate text-base font-bold tracking-tight">{{ header.title }}</h1>
+            <p x-show="!typingUser && isOnline" class="truncate text-xs text-emerald-600 flex items-center gap-1.5 font-semibold">
+              <span class="size-2 rounded-full bg-emerald-500 shadow-sm animate-pulse"></span>
+              <span>En ligne</span>
+            </p>
+            <p x-show="!typingUser && !isOnline" class="truncate text-xs text-muted flex items-center gap-1.5 font-medium">
+              <span class="size-2 rounded-full bg-zinc-300"></span>
+              <span>Hors ligne</span>
+            </p>
+            <p x-show="typingUser" x-cloak class="truncate text-xs font-bold text-brand flex items-center gap-1.5">
+              <span class="inline-flex gap-0.5">
+                <span class="size-1 rounded-full bg-brand animate-bounce [animation-delay:-0.3s]"></span>
+                <span class="size-1 rounded-full bg-brand animate-bounce [animation-delay:-0.15s]"></span>
+                <span class="size-1 rounded-full bg-brand animate-bounce"></span>
+              </span>
+              <span>en train d’écrire…</span>
+            </p>
           @end
         </div>
       </header>
@@ -69,6 +96,22 @@
                 @!messageBubble({ message: message, conversationId: activeId })
               @end
             @end
+
+            {{-- Bulle d'indication de saisie animée (style WhatsApp) --}}
+            <div
+              x-show="typingUser"
+              x-cloak
+              x-transition
+              class="flex items-center gap-2 self-start rounded-2xl rounded-bl-md bg-white px-3.5 py-2 text-xs font-medium text-muted shadow-card my-1"
+            >
+              <span class="font-bold text-ink" x-text="typingUser"></span>
+              <span>écrit</span>
+              <span class="inline-flex items-center gap-1 py-1">
+                <span class="size-1.5 rounded-full bg-brand animate-bounce [animation-delay:-0.32s]"></span>
+                <span class="size-1.5 rounded-full bg-brand animate-bounce [animation-delay:-0.16s]"></span>
+                <span class="size-1.5 rounded-full bg-brand animate-bounce"></span>
+              </span>
+            </div>
           </div>
         </div>
 
@@ -119,7 +162,7 @@
             placeholder="Écrire un message…"
             x-ref="field"
             x-model="draft"
-            x-on:input="autosize()"
+            x-on:input="onInput()"
             x-on:keydown="onKeydown($event)"
             class="max-h-36 min-h-12 flex-1 resize-none rounded-3xl border border-line bg-paper px-4 py-3 text-[15px] leading-6 outline-none transition placeholder:text-[#8d8d8d] focus:border-brand focus:bg-white focus:ring-4 focus:ring-brand/15"
           ></textarea>

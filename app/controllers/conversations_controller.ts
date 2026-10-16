@@ -1,5 +1,6 @@
 import ConversationPresenter from '#services/conversation_presenter'
 import ConversationService from '#services/conversation_service'
+import RealtimeService from '#services/realtime_service'
 import { startConversationValidator } from '#validators/conversation'
 import type { HttpContext } from '@adonisjs/core/http'
 
@@ -10,6 +11,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 export default class ConversationsController {
   private conversations = new ConversationService()
   private presenter = new ConversationPresenter()
+  private realtime = new RealtimeService()
 
   /**
    * Liste des conversations (page d'accueil de l'utilisateur connecté)
@@ -92,6 +94,23 @@ export default class ConversationsController {
 
     const conversation = await this.conversations.findForMember(user, conversationId)
     await this.conversations.markAsRead(conversation.id, user.id)
+
+    return response.noContent()
+  }
+
+  /**
+   * Diffuse le signal « en train d'écrire » aux autres membres de la conversation
+   */
+  async typing({ auth, params, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conversationId = Number(params.id)
+
+    const isMember = await this.conversations.isMember(user.id, conversationId)
+    if (!isMember) {
+      return response.forbidden()
+    }
+
+    this.realtime.userTyping(conversationId, user)
 
     return response.noContent()
   }
