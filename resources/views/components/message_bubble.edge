@@ -1,7 +1,14 @@
 @let(message = $props.get('message'))
 @let(conversationId = $props.get('conversationId'))
 @let(actionParams = { conversationId: conversationId, messageId: message.id })
-@let(authorColors = ['text-rose-600', 'text-sky-600', 'text-emerald-600', 'text-amber-600', 'text-violet-600', 'text-teal-600'])
+@let(authorColors = [
+  'text-rose-600',
+  'text-sky-600',
+  'text-emerald-600',
+  'text-amber-600',
+  'text-violet-600',
+  'text-teal-600',
+])
 
 <div
   id="message-{{ message.id }}"
@@ -10,8 +17,9 @@
   x-on:keydown.escape="close()"
   class="flex {{ message.isMine ? 'justify-end' : 'justify-start' }}"
 >
-  <div class="flex max-w-[85%] flex-col sm:max-w-[70%] {{ message.isMine ? 'items-end' : 'items-start' }}">
-
+  <div
+    class="flex max-w-[85%] flex-col sm:max-w-[70%] {{ message.isMine ? 'items-end' : 'items-start' }}"
+  >
     {{-- La bulle : un appui ouvre le menu d'actions --}}
     <div
       x-show="mode !== 'edit'"
@@ -19,22 +27,35 @@
       tabindex="0"
       x-on:click="toggle()"
       x-on:keydown.enter="toggle()"
-      class="cursor-pointer rounded-2xl px-4 py-2.5 {{ message.isDeleted ? 'border border-dashed border-line text-muted' : (message.isMine ? 'rounded-br-md bg-brand text-white' : 'rounded-bl-md bg-white text-ink shadow-card') }}"
+      class="cursor-pointer rounded-2xl px-4 py-2.5 {{
+        message.isDeleted
+          ? 'border border-dashed border-line text-muted'
+          : message.isMine
+            ? 'rounded-br-md bg-brand text-white'
+            : 'rounded-bl-md bg-white text-ink shadow-card'
+      }}"
     >
       @if(message.authorName && !message.isDeleted)
-        <p class="mb-0.5 text-xs font-bold {{ authorColors[message.authorColor] }}">{{ message.authorName }}</p>
+        <p class="mb-0.5 text-xs font-bold {{ authorColors[message.authorColor] }}">
+          {{ message.authorName }}
+        </p>
       @end
-
       @if(message.isDeleted)
         <p class="flex items-center gap-1.5 text-sm italic">
           @svg('lucide:ban', { width: 14, height: 14 })
+          
           Ce message a été supprimé
+
         </p>
       @else
         @if(message.body)
-          <p data-message-body class="whitespace-pre-wrap text-[15px] leading-relaxed [overflow-wrap:anywhere]">{{ message.body }}</p>
+          <p
+            data-message-body
+            class="whitespace-pre-wrap text-[15px] leading-relaxed [overflow-wrap:anywhere]"
+          >
+            {{ message.body }}
+          </p>
         @end
-
         @if(message.attachments?.length)
           <div class="{{ message.body ? 'mt-2' : '' }} flex flex-col gap-2">
             @each(file in message.attachments)
@@ -44,7 +65,11 @@
                   type="button"
                   data-zoom-src="{{ fileUrl }}"
                   data-zoom-alt="{{ file.originalName }}"
-                  class="block max-w-full overflow-hidden rounded-xl {{ message.isMine ? 'ring-1 ring-white/30' : 'ring-1 ring-line' }}"
+                  class="block max-w-full overflow-hidden rounded-xl {{
+                    message.isMine
+                      ? 'ring-1 ring-white/30'
+                      : 'ring-1 ring-line'
+                  }}"
                 >
                   <img
                     src="{{ fileUrl }}"
@@ -60,7 +85,11 @@
                   target="_blank"
                   rel="noopener noreferrer"
                   x-on:click.stop
-                  class="flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm {{ message.isMine ? 'border-white/30 bg-white/10 hover:bg-white/15' : 'border-line bg-paper hover:bg-white' }}"
+                  class="flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm {{
+                    message.isMine
+                      ? 'border-white/30 bg-white/10 hover:bg-white/15'
+                      : 'border-line bg-paper hover:bg-white'
+                  }}"
                 >
                   @svg('lucide:paperclip', { width: 16, height: 16 })
                   <span class="min-w-0 flex-1 truncate font-semibold">{{ file.originalName }}</span>
@@ -71,9 +100,19 @@
           </div>
         @end
       @end
-      <p class="mt-1 text-right text-[11px] {{ message.isDeleted ? 'text-muted' : (message.isMine ? 'text-white/70' : 'text-muted') }}">{{ message.isEdited ? 'modifié · ' : '' }}{{ message.time }}</p>
-    </div>
 
+      <p
+        class="mt-1 text-right text-[11px] {{
+          message.isDeleted
+            ? 'text-muted'
+            : message.isMine
+              ? 'text-white/70'
+              : 'text-muted'
+        }}"
+      >
+        {{ message.isEdited ? 'modifié · ' : '' }}{{ message.time }}
+      </p>
+    </div>
     {{-- Éditeur : remplace la bulle pendant la modification --}}
     @if(message.canEdit)
       <div x-show="mode === 'edit'" x-cloak class="w-[min(80vw,28rem)]">
@@ -113,9 +152,13 @@
         @end
       </div>
     @end
-
     {{-- Menu d'actions --}}
-    <div x-show="menu && mode === 'actions'" x-cloak x-transition class="mt-1.5 flex flex-wrap items-center gap-1">
+    <div
+      x-show="menu && mode === 'actions'"
+      x-cloak
+      x-transition
+      class="mt-1.5 flex flex-wrap items-center gap-1"
+    >
       @if(message.canEdit)
         <button
           type="button"
@@ -123,21 +166,30 @@
           class="inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-muted transition hover:bg-white hover:text-ink"
         >
           @svg('lucide:pencil', { width: 15, height: 15 })
+          
           Modifier
+
         </button>
       @end
+
       <button
         type="button"
         x-on:click="mode = 'delete'"
         class="inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-muted transition hover:bg-white hover:text-brand"
       >
         @svg('lucide:trash-2', { width: 15, height: 15 })
+        
         Supprimer
+
       </button>
     </div>
-
     {{-- Choix du type de suppression --}}
-    <div x-show="menu && mode === 'delete'" x-cloak x-transition class="mt-1.5 flex flex-wrap items-center gap-1">
+    <div
+      x-show="menu && mode === 'delete'"
+      x-cloak
+      x-transition
+      class="mt-1.5 flex flex-wrap items-center gap-1"
+    >
       @form({
         route: 'messages.destroy',
         routeParams: actionParams,
@@ -152,7 +204,6 @@
           Pour moi
         </button>
       @end
-
       @if(message.canDeleteForEveryone)
         @form({
           route: 'messages.destroy',

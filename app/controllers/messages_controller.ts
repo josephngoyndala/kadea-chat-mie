@@ -95,7 +95,12 @@ export default class MessagesController {
       return response.redirect().toRoute('conversations.show', { id: conversation.id })
     }
 
-    const { message, startsNewDay } = await this.messages.send(user, conversation, body, attachments)
+    const { message, startsNewDay } = await this.messages.send(
+      user,
+      conversation,
+      body,
+      attachments
+    )
     await this.conversations.markAsRead(conversation.id, user.id)
     this.realtime.messageCreated(conversation, message)
 

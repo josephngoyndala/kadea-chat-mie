@@ -13,13 +13,13 @@
   <body class="min-h-screen w-full max-w-full overflow-x-hidden bg-paper">
     @include('partials/app_header')
 
-    <div class="min-h-[calc(100dvh-4rem)] w-full max-w-full pb-20 sm:pb-0">{{{ await $slots.main() }}}</div>
-
+    <div class="min-h-[calc(100dvh-4rem)] w-full max-w-full pb-20 sm:pb-0">
+      {{{ await $slots.main() }}}
+    </div>
     {{-- Barre de navigation du bas : téléphone uniquement --}}
     <div class="fixed inset-x-0 bottom-0 z-20 w-full max-w-full sm:hidden">
       @include('partials/app_bottom_nav')
     </div>
-
     @include('partials/photo_lightbox')
     @include('partials/flash_alerts')
   </body>

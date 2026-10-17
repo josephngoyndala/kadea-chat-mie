@@ -110,8 +110,7 @@ export default class ConversationPresenter {
 
     const otherUser = otherMember?.user
     const isOnline = Boolean(
-      otherUser?.lastSeenAt &&
-        DateTime.now().diff(otherUser.lastSeenAt, 'minutes').minutes < 2
+      otherUser?.lastSeenAt && DateTime.now().diff(otherUser.lastSeenAt, 'minutes').minutes < 2
     )
 
     return {

@@ -30,12 +30,7 @@ export default class MessageService {
    * ouvre une nouvelle journée dans la conversation, pour afficher le
    * séparateur de jour.
    */
-  async send(
-    user: User,
-    conversation: Conversation,
-    body: string,
-    files: MultipartFile[] = []
-  ) {
+  async send(user: User, conversation: Conversation, body: string, files: MultipartFile[] = []) {
     return db.transaction(async (trx) => {
       const previous = await Message.query({ client: trx })
         .where('conversation_id', conversation.id)

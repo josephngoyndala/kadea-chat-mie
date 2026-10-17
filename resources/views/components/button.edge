@@ -23,8 +23,17 @@
   : $props.get('route')
     ? urlFor($props.get('route'), $props.get('routeParams'), $props.get('routeOptions'))
     : undefined)
-@let(attrs = $props.except(['text', 'variant', 'size', 'block', 'arrow', 'href', 'route', 'routeParams', 'routeOptions']))
-
+@let(attrs = $props.except([
+  'text',
+  'variant',
+  'size',
+  'block',
+  'arrow',
+  'href',
+  'route',
+  'routeParams',
+  'routeOptions',
+]))
 @if(href)
   <a {{ attrs.merge({ href: href, class: classes }).toAttrs() }}>
     {{{ buttonText }}}

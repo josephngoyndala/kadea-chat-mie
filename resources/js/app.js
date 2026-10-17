@@ -72,7 +72,7 @@ document.addEventListener('click', (event) => {
  * morceau de HTML à insérer dans la page.
  */
 function postToServer(form, bodyOverride) {
-  const headers = { 'X-Chat-Fetch': '1', Accept: 'application/json' }
+  const headers = { 'X-Chat-Fetch': '1', 'Accept': 'application/json' }
   const body = bodyOverride ?? new URLSearchParams(new FormData(form))
 
   return fetch(form.action, {
@@ -200,7 +200,9 @@ Alpine.data('conversationChat', function () {
     init() {
       this.conversationId = this.$el.dataset.conversationId
       this.userId = parseInt(this.$el.dataset.userId || '0', 10)
-      this.otherUserId = this.$el.dataset.otherUserId ? parseInt(this.$el.dataset.otherUserId, 10) : null
+      this.otherUserId = this.$el.dataset.otherUserId
+        ? parseInt(this.$el.dataset.otherUserId, 10)
+        : null
       this.isOnline = this.$el.dataset.isOnline === '1'
       this.messageUrlTemplate = this.$el.dataset.messageUrl || ''
       this.catchUpUrl = this.$el.dataset.catchUpUrl || ''
@@ -236,9 +238,7 @@ Alpine.data('conversationChat', function () {
 
       // 1. Canal de la conversation (messages et indicateur de saisie)
       if (this.conversationId) {
-        const conversationSub = transmit.subscription(
-          `conversations/${this.conversationId}`
-        )
+        const conversationSub = transmit.subscription(`conversations/${this.conversationId}`)
         await conversationSub.create()
 
         conversationSub.onMessage((event) => {
@@ -297,7 +297,10 @@ Alpine.data('conversationChat', function () {
      * termine par /0, que l'on remplace par l'identifiant.
      */
     messageUrl(messageId) {
-      return (this.messageUrlTemplate || this.$el.dataset.messageUrl || '').replace(/\/0$/, `/${messageId}`)
+      return (this.messageUrlTemplate || this.$el.dataset.messageUrl || '').replace(
+        /\/0$/,
+        `/${messageId}`
+      )
     },
 
     /**
@@ -590,7 +593,14 @@ Alpine.data('conversationChat', function () {
       if (!target) return
 
       target.setAttribute('data-search-target', '1')
-      target.classList.add('ring-4', 'ring-brand/40', 'bg-brand-50/50', 'transition-all', 'duration-300', 'rounded-2xl')
+      target.classList.add(
+        'ring-4',
+        'ring-brand/40',
+        'bg-brand-50/50',
+        'transition-all',
+        'duration-300',
+        'rounded-2xl'
+      )
 
       target.scrollIntoView({ behavior: 'smooth', block: 'center' })
     },
@@ -697,7 +707,9 @@ Alpine.data('conversationChat', function () {
       try {
         const form = event.target
         const payload =
-          this.pendingFiles.length > 0 ? this.buildSendFormData(form) : new URLSearchParams(new FormData(form))
+          this.pendingFiles.length > 0
+            ? this.buildSendFormData(form)
+            : new URLSearchParams(new FormData(form))
         const response = await postToServer(form, payload)
 
         if (response.status === 201) {

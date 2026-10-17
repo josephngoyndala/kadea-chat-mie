@@ -20,11 +20,7 @@ export default class MessageAttachmentService {
   /**
    * Crée une ligne par fichier et déplace le fichier vers le stockage.
    */
-  async attachToMessage(
-    message: Message,
-    files: MultipartFile[],
-    trx?: TransactionClientContract
-  ) {
+  async attachToMessage(message: Message, files: MultipartFile[], trx?: TransactionClientContract) {
     if (files.length === 0) {
       return []
     }
