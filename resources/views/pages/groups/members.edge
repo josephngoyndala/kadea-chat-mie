@@ -9,11 +9,66 @@
         class="inline-flex w-fit min-h-11 items-center gap-2 text-sm font-semibold text-muted transition hover:text-ink"
       >
         @svg('lucide:arrow-left', { width: 18, height: 18 })
+        
         Retour à la discussion
-      </a>
 
+      </a>
+      {{-- Photo du groupe --}}
+      <section class="rounded-3xl border border-line bg-white p-5 shadow-card sm:p-6">
+        <h2 class="text-lg font-bold tracking-tight">Photo du groupe</h2>
+        <p class="mt-1 text-sm text-muted">Image JPG, PNG ou WEBP, 2 Mo maximum.</p>
+
+        <div class="mt-6 flex flex-col items-center gap-6 sm:flex-row sm:items-center">
+          @if(groupAvatarUrl)
+            @!avatar({ src: groupAvatarUrl, name: header.title, size: 96 })
+          @else
+            @!avatar({ initials: header.initials, size: 96 })
+          @end
+          @if(isAdmin)
+            <div class="flex w-full min-w-0 flex-1 flex-col gap-3">
+              @form({
+                route: 'group_members.update_avatar',
+                routeParams: { conversationId: conversationId },
+                method: 'POST',
+                enctype: 'multipart/form-data',
+                class: 'flex flex-col gap-3',
+              })
+                @field.root({ name: 'avatar' })
+                  <input
+                    type="file"
+                    name="avatar"
+                    accept="image/png,image/jpeg,image/webp"
+                    class="block w-full min-w-0 cursor-pointer rounded-field border border-line bg-white text-sm text-muted file:mr-4 file:cursor-pointer file:border-0 file:bg-brand-50 file:px-4 file:py-3.5 file:font-semibold file:text-brand"
+                  />
+                  @!field.error()
+                @end
+                @button({ type: 'submit', size: 'sm' })
+                  Enregistrer la photo
+                @end
+              @end
+              @if(groupAvatarUrl)
+                @form({
+                  route: 'group_members.destroy_avatar',
+                  routeParams: { conversationId: conversationId },
+                  method: 'POST',
+                })
+                  @button({ type: 'submit', variant: 'ghost', size: 'sm' })
+                    Supprimer la photo
+                  @end
+                @end
+              @end
+            </div>
+          @else
+            <p class="text-sm text-muted">
+              Seuls les administrateurs peuvent modifier la photo du groupe.
+            </p>
+          @end
+        </div>
+      </section>
       {{-- Membres --}}
-      <ul class="divide-y divide-line overflow-hidden rounded-3xl border border-line bg-white shadow-card">
+      <ul
+        class="divide-y divide-line overflow-hidden rounded-3xl border border-line bg-white shadow-card"
+      >
         @each(member in members)
           <li class="flex items-center gap-3 p-4" x-data="{ confirming: false }">
             @if(member.avatarUrl)
@@ -23,14 +78,17 @@
             @end
 
             <div class="min-w-0 flex-1">
-              <p class="truncate text-[15px] font-bold">{{ member.name }}{{ member.isMe ? ' (vous)' : '' }}</p>
+              <p class="truncate text-[15px] font-bold">
+                {{ member.name }}{{ member.isMe ? ' (vous)' : '' }}
+              </p>
               @if(member.isAdmin)
-                <span class="mt-0.5 inline-flex rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-semibold text-brand">
+                <span
+                  class="mt-0.5 inline-flex rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-semibold text-brand"
+                >
                   Administrateur
                 </span>
               @end
             </div>
-
             @if(isAdmin && !member.isMe)
               @form({
                 route: 'group_members.destroy',
@@ -68,7 +126,6 @@
           </li>
         @end
       </ul>
-
       {{-- Ajout de membres : réservé aux administrateurs --}}
       @if(isAdmin)
         <section class="rounded-3xl border border-line bg-white p-5 shadow-card sm:p-6">
@@ -76,7 +133,11 @@
 
           <form
             method="GET"
-            action="{{ urlFor('group_members.index', { conversationId: conversationId }) }}"
+            action="{{
+              urlFor('group_members.index', {
+                conversationId: conversationId,
+              })
+            }}"
             role="search"
             class="mt-4"
             x-data
@@ -84,7 +145,9 @@
           >
             <label for="q" class="sr-only">Rechercher un utilisateur</label>
             <div class="relative">
-              <span class="pointer-events-none absolute inset-y-0 left-0 grid w-12 place-items-center text-muted">
+              <span
+                class="pointer-events-none absolute inset-y-0 left-0 grid w-12 place-items-center text-muted"
+              >
                 @svg('lucide:search', { width: 20, height: 20 })
               </span>
               <input
@@ -98,7 +161,6 @@
               />
             </div>
           </form>
-
           @if(candidates.length)
             <ul class="mt-4 divide-y divide-line">
               @each(person in candidates)
@@ -113,7 +175,6 @@
                     <p class="truncate text-[15px] font-bold">{{ person.name }}</p>
                     <p class="truncate text-sm text-muted">{{ person.maskedEmail }}</p>
                   </div>
-
                   @form({
                     route: 'group_members.store',
                     routeParams: { conversationId: conversationId },
@@ -130,7 +191,11 @@
             </ul>
           @else
             <p class="mt-4 text-sm text-muted">
-              {{ term ? 'Aucun membre trouvé pour cette recherche.' : 'Tous les membres confirmés font déjà partie du groupe.' }}
+              {{
+                term
+                  ? 'Aucun membre trouvé pour cette recherche.'
+                  : 'Tous les membres confirmés font déjà partie du groupe.'
+              }}
             </p>
           @end
         </section>

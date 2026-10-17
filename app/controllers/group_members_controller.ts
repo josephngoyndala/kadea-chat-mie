@@ -4,7 +4,8 @@ import GroupService, { GroupRuleError } from '#services/group_service'
 import RealtimeService from '#services/realtime_service'
 import UserPresenter, { type DirectoryEntry } from '#services/user_presenter'
 import UserSearchService from '#services/user_search_service'
-import { addMemberValidator } from '#validators/group'
+import AvatarService from '#services/avatar_service'
+import { addMemberValidator, updateGroupAvatarValidator } from '#validators/group'
 import { searchUsersValidator } from '#validators/conversation'
 import type { HttpContext } from '@adonisjs/core/http'
 
@@ -19,6 +20,7 @@ export default class GroupMembersController {
   private search = new UserSearchService()
   private users = new UserPresenter()
   private realtime = new RealtimeService()
+  private avatars = new AvatarService()
 
   /**
    * Liste des membres, et recherche de personnes à ajouter pour un
@@ -45,11 +47,57 @@ export default class GroupMembersController {
     return view.render('pages/groups/members', {
       conversationId: conversation.id,
       header: await this.presenter.header(conversation, viewer),
+      groupAvatarUrl: await this.avatars.urlForKey(conversation.avatarPath),
       members: await this.presenter.members(conversation, viewer),
       isAdmin,
       candidates,
       term,
     })
+  }
+
+  /**
+   * Met à jour la photo du groupe (administrateurs uniquement).
+   */
+  async updateAvatar({ auth, params, request, session, response }: HttpContext) {
+    const admin = auth.getUserOrFail()
+    const conversation = await this.conversations.findGroupForMember(
+      admin,
+      Number(params.conversationId)
+    )
+
+    if (!this.groups.isAdmin(admin, conversation)) {
+      session.flash('error', 'Seuls les administrateurs du groupe peuvent changer la photo.')
+      return response.redirect().toRoute('group_members.index', { conversationId: conversation.id })
+    }
+
+    const { avatar } = await request.validateUsing(updateGroupAvatarValidator)
+    await this.avatars.replaceForConversation(conversation, avatar)
+    this.realtime.conversationUpdated(conversation)
+
+    session.flash('success', 'La photo du groupe a été mise à jour.')
+    return response.redirect().toRoute('group_members.index', { conversationId: conversation.id })
+  }
+
+  /**
+   * Supprime la photo du groupe (administrateurs uniquement).
+   */
+  async destroyAvatar({ auth, params, session, response }: HttpContext) {
+    const admin = auth.getUserOrFail()
+    const conversation = await this.conversations.findGroupForMember(
+      admin,
+      Number(params.conversationId)
+    )
+
+    if (!this.groups.isAdmin(admin, conversation)) {
+      session.flash('error', 'Seuls les administrateurs du groupe peuvent supprimer la photo.')
+      return response.redirect().toRoute('group_members.index', { conversationId: conversation.id })
+    }
+
+    await this.avatars.removeForConversation(conversation)
+    this.realtime.conversationUpdated(conversation)
+
+    session.flash('success', 'La photo du groupe a été supprimée.')
+    return response.redirect().toRoute('group_members.index', { conversationId: conversation.id })
   }
 
   /**

@@ -57,6 +57,9 @@ router
       .get('conversations/:id/card', [controllers.Conversations, 'card'])
       .where('id', router.matchers.number())
     router
+      .post('conversations/:id/delete', [controllers.Conversations, 'destroy'])
+      .where('id', router.matchers.number())
+    router
       .post('conversations/:id/read', [controllers.Conversations, 'read'])
       .where('id', router.matchers.number())
     router
@@ -83,6 +86,15 @@ router
       ])
       .where('conversationId', router.matchers.number())
       .where('userId', router.matchers.number())
+    router
+      .post('conversations/:conversationId/avatar', [controllers.GroupMembers, 'updateAvatar'])
+      .where('conversationId', router.matchers.number())
+    router
+      .post('conversations/:conversationId/avatar/delete', [
+        controllers.GroupMembers,
+        'destroyAvatar',
+      ])
+      .where('conversationId', router.matchers.number())
 
     router
       .get('conversations/:conversationId/messages', [controllers.Messages, 'index'])

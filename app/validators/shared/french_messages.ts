@@ -18,8 +18,9 @@ export function frenchMessages() {
       'maxLength': 'Le champ {{ field }} ne doit pas dépasser {{ max }} caractères.',
       'accepted': 'Vous devez accepter les {{ field }}.',
       'file': 'Sélectionnez une image valide.',
-      'file.size': 'La photo est trop lourde (2 Mo maximum).',
-      'file.extname': 'La photo doit être au format JPG, PNG ou WEBP.',
+      'file.size': 'Le fichier est trop lourd.',
+      'file.extname': 'Ce type de fichier n’est pas accepté.',
+      'attachments.maxLength': 'Vous ne pouvez pas envoyer plus de {{ max }} fichiers à la fois.',
       'database.unique': 'Cette valeur de {{ field }} est déjà utilisée.',
       'email.database.unique': 'Cette adresse e-mail est déjà utilisée.',
       'passwordConfirmation.sameAs': 'Les mots de passe ne correspondent pas.',
@@ -42,6 +43,7 @@ export function frenchMessages() {
       scope: 'type de suppression',
       name: 'nom du groupe',
       memberIds: 'membres',
+      attachments: 'pièces jointes',
     }
   )
 }

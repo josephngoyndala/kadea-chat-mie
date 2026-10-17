@@ -74,10 +74,7 @@ export default class ConversationsController {
     const unreadMap = await this.conversations.unreadCountsFor([conversation.id], user)
     const unreadCount = isActive ? 0 : (unreadMap.get(conversation.id) ?? 0)
 
-    const [item] = await this.presenter.cards(
-      [{ conversation, lastMessage, unreadCount }],
-      user
-    )
+    const [item] = await this.presenter.cards([{ conversation, lastMessage, unreadCount }], user)
 
     return view.render('fragments/conversation_card', {
       item,
@@ -152,5 +149,22 @@ export default class ConversationsController {
     const conversation = await this.conversations.startPrivate(user, userId)
 
     return response.redirect().toRoute('conversations.show', { id: conversation.id })
+  }
+
+  /**
+   * Quitte une conversation : elle disparaît de la liste de l'utilisateur.
+   */
+  async destroy({ auth, params, response, session }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conversationId = Number(params.id)
+
+    const conversation = await this.conversations.findForMember(user, conversationId)
+    const notifyUserIds = conversation.members.map((member) => member.userId)
+
+    await this.conversations.leave(user, conversationId)
+    this.realtime.membersChanged(conversation, notifyUserIds)
+
+    session.flash('success', 'La discussion a été supprimée de votre liste.')
+    return response.redirect().toRoute('dashboard')
   }
 }

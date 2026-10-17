@@ -4,7 +4,6 @@
     description: 'Parcourez les membres ou recherchez par nom ou adresse e-mail.',
   })
     <div class="flex w-full min-w-0 max-w-2xl flex-col gap-4">
-
       <form
         method="GET"
         action="{{ urlFor('users.index') }}"
@@ -14,7 +13,9 @@
       >
         <label for="q" class="sr-only">Rechercher un utilisateur</label>
         <div class="relative">
-          <span class="pointer-events-none absolute inset-y-0 left-0 grid w-12 place-items-center text-muted">
+          <span
+            class="pointer-events-none absolute inset-y-0 left-0 grid w-12 place-items-center text-muted"
+          >
             @svg('lucide:search', { width: 20, height: 20 })
           </span>
           <input
@@ -29,13 +30,18 @@
           />
         </div>
       </form>
-
       @if(members.length)
         <p class="px-1 text-sm font-semibold text-muted">
-          {{ searched ? `${total} résultat${total > 1 ? 's' : ''}` : `${total} membre${total > 1 ? 's' : ''}` }}
+          {{
+            searched
+              ? `${total} résultat${total > 1 ? 's' : ''}`
+              : `${total} membre${total > 1 ? 's' : ''}`
+          }}
         </p>
 
-        <ul class="divide-y divide-line overflow-hidden rounded-3xl border border-line bg-white shadow-card">
+        <ul
+          class="divide-y divide-line overflow-hidden rounded-3xl border border-line bg-white shadow-card"
+        >
           @each(person in members)
             <li class="flex items-center gap-3 p-4">
               @if(person.avatarUrl)
@@ -49,7 +55,6 @@
                 <p class="truncate text-sm text-muted">{{ person.maskedEmail }}</p>
                 <p class="truncate text-xs text-muted">Inscrit le {{ person.joinedOn }}</p>
               </div>
-
               @form({ route: 'conversations.store', method: 'POST', class: 'flex-none' })
                 <input type="hidden" name="userId" value="{{ person.id }}" />
                 @button({ type: 'submit', size: 'sm' })
@@ -59,7 +64,6 @@
             </li>
           @end
         </ul>
-
         @if(previousUrl || nextUrl)
           <nav class="flex items-center justify-between gap-3" aria-label="Pagination">
             @if(previousUrl)
@@ -70,7 +74,6 @@
             @else
               <span></span>
             @end
-
             @if(nextUrl)
               @button({ href: nextUrl, variant: 'secondary', size: 'sm' })
                 Suivant
@@ -80,16 +83,22 @@
           </nav>
         @end
       @elseif(searched)
-        <div class="flex flex-col items-center gap-3 rounded-3xl border border-line bg-white px-6 py-12 text-center shadow-card">
+        <div
+          class="flex flex-col items-center gap-3 rounded-3xl border border-line bg-white px-6 py-12 text-center shadow-card"
+        >
           <span class="grid size-14 place-items-center rounded-2xl bg-paper text-muted">
             @svg('lucide:user-search', { width: 26, height: 26 })
           </span>
           <p class="text-sm text-muted">
-            Aucun membre trouvé pour « {{ term }} ». Essayez avec un seul mot, ou une partie du nom.
+            Aucun membre trouvé pour «
+            {{ term }}
+            ». Essayez avec un seul mot, ou une partie du nom.
           </p>
         </div>
       @else
-        <div class="flex flex-col items-center gap-3 rounded-3xl border border-line bg-white px-6 py-12 text-center shadow-card">
+        <div
+          class="flex flex-col items-center gap-3 rounded-3xl border border-line bg-white px-6 py-12 text-center shadow-card"
+        >
           <span class="grid size-14 place-items-center rounded-2xl bg-brand-50 text-brand">
             @svg('lucide:users', { width: 26, height: 26 })
           </span>
