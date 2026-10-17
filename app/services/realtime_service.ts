@@ -4,6 +4,12 @@ import type Message from '#models/message'
 import type User from '#models/user'
 
 /**
+ * Nombre maximum de messages rafraîchis d'un coup quand un statut change
+ * (reçu / lu). Les plus anciens sont ignorés : ils ne sont plus à l'écran.
+ */
+const STATUS_REFRESH_LIMIT = 30
+
+/**
  * Annonce en temps réel ce qui se passe dans les conversations. Les
  * événements ne contiennent que des identifiants : chaque navigateur
  * demande ensuite au serveur ce qu'il a le droit de voir.
@@ -56,6 +62,21 @@ export default class RealtimeService {
     })
 
     this.conversationUpdated(conversation)
+  }
+
+  /**
+   * Le statut de messages a changé (reçu ou lu par un destinataire). On
+   * réutilise l'événement « message.updated » : le navigateur recharge alors
+   * la bulle, qui affiche les nouveaux traits. La liste des conversations
+   * n'a pas besoin d'être rafraîchie.
+   */
+  statusChanged(conversationId: number, messageIds: number[]) {
+    for (const messageId of messageIds.slice(-STATUS_REFRESH_LIMIT)) {
+      transmit.broadcast(`conversations/${conversationId}`, {
+        type: 'message.updated',
+        messageId,
+      })
+    }
   }
 
   /**

@@ -5,6 +5,7 @@ import MessageAttachmentService, {
   MessageAttachmentError,
 } from '#services/message_attachment_service'
 import MessageService, { MessageNotEditableError } from '#services/message_service'
+import { isUserOnline } from '#services/presence'
 import RealtimeService from '#services/realtime_service'
 import {
   catchUpValidator,
@@ -43,7 +44,7 @@ export default class MessagesController {
       items.map(({ message, startsNewDay }) =>
         view.render('fragments/message', {
           conversationId: conversation.id,
-          ...this.presenter.fragment(message, user, startsNewDay, showAuthor),
+          ...this.presenter.fragment(message, user, startsNewDay, showAuthor, conversation.members),
         })
       )
     )
@@ -53,8 +54,9 @@ export default class MessagesController {
 
   /**
    * Une bulle de message pour l'utilisateur connecté, appelée quand un
-   * événement temps réel annonce un message nouveau ou modifié. Avec
-   * ?bare=1, sans séparateur de jour (pour remplacer une bulle existante).
+   * événement temps réel annonce un message nouveau ou modifié (ou dont le
+   * statut a changé). Avec ?bare=1, sans séparateur de jour (pour remplacer
+   * une bulle existante).
    */
   async show({ auth, params, request, response, view }: HttpContext) {
     const user = auth.getUserOrFail()
@@ -70,7 +72,8 @@ export default class MessagesController {
         message,
         user,
         startsNewDay,
-        this.presenter.showsAuthors(conversation)
+        this.presenter.showsAuthors(conversation),
+        conversation.members
       ),
     })
 
@@ -118,8 +121,33 @@ export default class MessagesController {
       body,
       attachments
     )
-    await this.conversations.markAsRead(conversation.id, user.id)
+
+    /**
+     * Les membres déjà en ligne reçoivent le message tout de suite : il
+     * passe à « reçu » (deux traits gris). Les autres le recevront à leur
+     * prochaine connexion.
+     */
+    const onlineRecipientIds = conversation.members
+      .filter((member) => member.userId !== user.id && isUserOnline(member.user))
+      .map((member) => member.userId)
+    await this.conversations.markDeliveredFor(conversation.id, onlineRecipientIds, message.id)
+
+    /**
+     * Répondre dans une conversation, c'est avoir lu ce qui précède : les
+     * messages des autres passent à « lu » chez eux.
+     */
+    const readIds = await this.conversations.markAsRead(conversation.id, user.id)
+
+    /**
+     * Les pointeurs ont changé : on recharge les membres pour que la bulle
+     * renvoyée affiche le bon statut.
+     */
+    await conversation.load('members', (members) => {
+      members.preload('user')
+    })
+
     this.realtime.messageCreated(conversation, message)
+    this.realtime.statusChanged(conversation.id, readIds)
 
     if (!this.wantsFragment(request)) {
       return response.redirect().toRoute('conversations.show', { id: conversation.id })
@@ -131,7 +159,8 @@ export default class MessagesController {
         message,
         user,
         startsNewDay,
-        this.presenter.showsAuthors(conversation)
+        this.presenter.showsAuthors(conversation),
+        conversation.members
       ),
     })
 
@@ -169,7 +198,13 @@ export default class MessagesController {
 
     const html = await view.render('fragments/message', {
       conversationId: conversation.id,
-      ...this.presenter.fragment(message, user, false, this.presenter.showsAuthors(conversation)),
+      ...this.presenter.fragment(
+        message,
+        user,
+        false,
+        this.presenter.showsAuthors(conversation),
+        conversation.members
+      ),
     })
 
     return response.type('html').send(html)
@@ -203,7 +238,13 @@ export default class MessagesController {
 
     const html = await view.render('fragments/message', {
       conversationId: conversation.id,
-      ...this.presenter.fragment(message, user, false, this.presenter.showsAuthors(conversation)),
+      ...this.presenter.fragment(
+        message,
+        user,
+        false,
+        this.presenter.showsAuthors(conversation),
+        conversation.members
+      ),
     })
 
     return response.type('html').send(html)

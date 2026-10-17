@@ -1,0 +1,2266 @@
+]633;E;for f in app/services/realtime_service.ts app/services/message_service.ts app/services/conversation_service.ts app/services/conversation_presenter.ts app/controllers/messages_controller.ts app/controllers/conversations_controller.ts start/transmit.ts start/routes.ts resources/views/components/message_bubble.edge resources/views/fragments/message.edge resources/views/pages/conversations/show.edge resources/views/components/conversation_card.edge\x3b do echo\x3b echo "===== $f ====="\x3b cat "$f"\x3b done > etape_a.txt;4818b136-0ee1-4ad3-9b57-509ec97c530f]633;C
+===== app/services/realtime_service.ts =====
+import transmit from '@adonisjs/transmit/services/main'
+import type Conversation from '#models/conversation'
+import type Message from '#models/message'
+import type User from '#models/user'
+
+/**
+ * Annonce en temps réel ce qui se passe dans les conversations. Les
+ * événements ne contiennent que des identifiants : chaque navigateur
+ * demande ensuite au serveur ce qu'il a le droit de voir.
+ *
+ * La conversation doit avoir ses membres chargés.
+ */
+export default class RealtimeService {
+  /**
+   * Un nouveau message a été envoyé.
+   */
+  messageCreated(conversation: Conversation, message: Message) {
+    transmit.broadcast(`conversations/${conversation.id}`, {
+      type: 'message.created',
+      messageId: message.id,
+    })
+
+    this.conversationUpdated(conversation)
+  }
+
+  /**
+   * Un membre est en train d'écrire dans la conversation.
+   */
+  userTyping(conversationId: number, user: User) {
+    const firstName = user.fullName?.split(' ')[0] ?? user.email.split('@')[0]
+    transmit.broadcast(`conversations/${conversationId}`, {
+      type: 'user.typing',
+      userId: user.id,
+      userName: firstName,
+    })
+  }
+
+  /**
+   * Diffuse le changement d'état de présence (en ligne / hors ligne) d'un utilisateur.
+   */
+  userPresence(userId: number, isOnline: boolean) {
+    transmit.broadcast('presence', {
+      type: 'user.presence',
+      userId,
+      isOnline,
+    })
+  }
+
+  /**
+   * Un message a été modifié ou supprimé pour tous.
+   */
+  messageUpdated(conversation: Conversation, message: Message) {
+    transmit.broadcast(`conversations/${conversation.id}`, {
+      type: 'message.updated',
+      messageId: message.id,
+    })
+
+    this.conversationUpdated(conversation)
+  }
+
+  /**
+   * Prévient chaque membre que la carte de cette conversation, dans sa liste,
+   * doit être rafraîchie (aperçu, heure, position).
+   */
+  conversationUpdated(conversation: Conversation) {
+    this.membersChanged(conversation)
+  }
+
+  /**
+   * Prévient les membres du groupe, ainsi que des utilisateurs en plus
+   * (ajoutés ou retirés), de rafraîchir leur liste. Pour un utilisateur
+   * retiré, la carte demandée est introuvable : sa liste la retire.
+   */
+  membersChanged(conversation: Conversation, extraUserIds: number[] = []) {
+    const userIds = new Set([
+      ...conversation.members.map((member) => member.userId),
+      ...extraUserIds,
+    ])
+
+    for (const userId of userIds) {
+      transmit.broadcast(`users/${userId}`, {
+        type: 'conversation.updated',
+        conversationId: conversation.id,
+      })
+    }
+  }
+}
+
+===== app/services/message_service.ts =====
+import type { MultipartFile } from '@adonisjs/core/bodyparser'
+import { DateTime } from 'luxon'
+import db from '@adonisjs/lucid/services/db'
+import Conversation from '#models/conversation'
+import Message from '#models/message'
+import MessageDeletion from '#models/message_deletion'
+import type User from '#models/user'
+import { dayKey } from '#services/date_formatter'
+import MessageAttachmentService from '#services/message_attachment_service'
+import {
+  EDIT_WINDOW_MINUTES,
+  NOT_HIDDEN_FOR_USER,
+  isWithinEditWindow,
+} from '#services/message_rules'
+
+/**
+ * Levée quand un message ne peut pas (ou plus) être modifié.
+ */
+export class MessageNotEditableError extends Error {}
+
+/**
+ * Règles métier des messages : envoi, lecture, modification et suppression.
+ */
+export default class MessageService {
+  private attachments = new MessageAttachmentService()
+
+  /**
+   * Enregistre un message et met à jour la date du dernier message de la
+   * conversation (qui sert à trier la liste). Indique aussi si ce message
+   * ouvre une nouvelle journée dans la conversation, pour afficher le
+   * séparateur de jour.
+   */
+  async send(user: User, conversation: Conversation, body: string, files: MultipartFile[] = []) {
+    return db.transaction(async (trx) => {
+      const previous = await Message.query({ client: trx })
+        .where('conversation_id', conversation.id)
+        .orderBy('id', 'desc')
+        .first()
+
+      const trimmed = body.trim()
+      const message = await Message.create(
+        {
+          conversationId: conversation.id,
+          senderId: user.id,
+          body: trimmed.length > 0 ? trimmed : null,
+        },
+        { client: trx }
+      )
+
+      if (files.length > 0) {
+        await this.attachments.attachToMessage(message, files, trx)
+      }
+
+      await Conversation.query({ client: trx })
+        .where('id', conversation.id)
+        .update({ last_message_at: message.createdAt.toJSDate() })
+
+      await message.load('sender')
+      await message.load('attachments')
+
+      return {
+        message,
+        startsNewDay: !previous || dayKey(previous.createdAt) !== dayKey(message.createdAt),
+      }
+    })
+  }
+
+  /**
+   * Un message de la conversation, avec son auteur, à condition que
+   * l'utilisateur ne l'ait pas masqué. Sinon la recherche échoue et
+   * l'application répond « introuvable ».
+   */
+  async findVisible(user: User, conversationId: number, messageId: number) {
+    return Message.query()
+      .where('id', messageId)
+      .where('conversation_id', conversationId)
+      .whereRaw(NOT_HIDDEN_FOR_USER, [user.id])
+      .preload('sender')
+      .preload('attachments')
+      .firstOrFail()
+  }
+
+  /**
+   * Indique si ce message ouvre une nouvelle journée dans sa conversation.
+   */
+  async startsNewDay(message: Message) {
+    const previous = await Message.query()
+      .where('conversation_id', message.conversationId)
+      .where('id', '<', message.id)
+      .orderBy('id', 'desc')
+      .first()
+
+    return !previous || dayKey(previous.createdAt) !== dayKey(message.createdAt)
+  }
+
+  /**
+   * Messages visibles envoyés après un identifiant donné : sert à rattraper
+   * les messages manqués après une coupure de connexion.
+   */
+  async listAfter(user: User, conversationId: number, afterId: number) {
+    const messages = await Message.query()
+      .where('conversation_id', conversationId)
+      .where('id', '>', afterId)
+      .whereRaw(NOT_HIDDEN_FOR_USER, [user.id])
+      .preload('sender')
+      .preload('attachments')
+      .orderBy('id', 'asc')
+      .limit(100)
+
+    let previous: Message | null =
+      messages.length > 0
+        ? await Message.query()
+            .where('conversation_id', conversationId)
+            .where('id', '<', messages[0].id)
+            .orderBy('id', 'desc')
+            .first()
+        : null
+
+    return messages.map((message) => {
+      const startsNewDay = !previous || dayKey(previous.createdAt) !== dayKey(message.createdAt)
+      previous = message
+
+      return { message, startsNewDay }
+    })
+  }
+
+  /**
+   * Modifie le texte d'un message de l'utilisateur, pendant le délai autorisé
+   * et tant qu'il n'a pas été supprimé pour tous.
+   */
+  async edit(user: User, conversationId: number, messageId: number, body: string) {
+    const message = await this.findOwn(user, conversationId, messageId)
+
+    if (message.deletedAt) {
+      throw new MessageNotEditableError('Ce message a été supprimé et ne peut plus être modifié.')
+    }
+    if (!isWithinEditWindow(message.createdAt)) {
+      throw new MessageNotEditableError(
+        `Un message ne peut être modifié que pendant ${EDIT_WINDOW_MINUTES} minutes.`
+      )
+    }
+
+    if (message.body !== body) {
+      message.body = body
+      message.editedAt = DateTime.now()
+      await message.save()
+    }
+
+    await message.load('sender')
+    await message.load('attachments')
+
+    return message
+  }
+
+  /**
+   * Supprime un message pour tous les participants. Réservé à son auteur.
+   * La suppression est logique : on renseigne la date et on vide le texte.
+   */
+  async deleteForEveryone(user: User, conversationId: number, messageId: number) {
+    const message = await this.findOwn(user, conversationId, messageId)
+
+    if (!message.deletedAt) {
+      message.deletedAt = DateTime.now()
+      message.body = null
+      await message.save()
+    }
+
+    return message
+  }
+
+  /**
+   * Masque un message pour l'utilisateur seulement. Les autres participants
+   * le voient toujours. N'importe quel message de la conversation peut être
+   * masqué, y compris un message déjà supprimé pour tous.
+   */
+  async hideForUser(user: User, conversationId: number, messageId: number) {
+    const message = await Message.query()
+      .where('id', messageId)
+      .where('conversation_id', conversationId)
+      .firstOrFail()
+
+    await MessageDeletion.firstOrCreate({ messageId: message.id, userId: user.id })
+
+    return message
+  }
+
+  /**
+   * Message de l'utilisateur dans cette conversation. Dans tout autre cas
+   * (autre auteur, autre conversation), la recherche échoue et l'application
+   * répond « introuvable ».
+   */
+  private async findOwn(user: User, conversationId: number, messageId: number) {
+    return Message.query()
+      .where('id', messageId)
+      .where('conversation_id', conversationId)
+      .where('sender_id', user.id)
+      .preload('attachments')
+      .firstOrFail()
+  }
+}
+
+===== app/services/conversation_service.ts =====
+import db from '@adonisjs/lucid/services/db'
+import Conversation from '#models/conversation'
+import ConversationMember from '#models/conversation_member'
+import Message from '#models/message'
+import User from '#models/user'
+import { NOT_HIDDEN_FOR_USER } from '#services/message_rules'
+
+export type ConversationWithLastMessage = {
+  conversation: Conversation
+  lastMessage: Message | null
+  unreadCount?: number
+}
+
+/**
+ * Nombre de messages chargés à l'ouverture d'une conversation.
+ */
+const HISTORY_LIMIT = 100
+
+/**
+ * Règles métier des conversations : liste, accès, historique, création.
+ */
+export default class ConversationService {
+  /**
+   * Conversations de l'utilisateur, la plus récente en premier. Un groupe est
+   * toujours visible de ses membres ; une conversation privée encore vide
+   * n'apparaît que chez celui qui l'a créée.
+   */
+  async listFor(user: User): Promise<ConversationWithLastMessage[]> {
+    const conversations = await Conversation.query()
+      .whereHas('members', (members) => {
+        members.where('user_id', user.id)
+      })
+      .where((visible) => {
+        visible
+          .where('type', 'group')
+          .orWhereNotNull('last_message_at')
+          .orWhere('created_by', user.id)
+      })
+      .preload('members', (members) => {
+        members.preload('user')
+      })
+      .orderByRaw('last_message_at DESC NULLS LAST, created_at DESC')
+
+    const conversationIds = conversations.map((item) => item.id)
+    const [lastMessages, unreadCounts] = await Promise.all([
+      this.lastMessagesOf(conversationIds, user),
+      this.unreadCountsFor(conversationIds, user),
+    ])
+
+    return conversations.map((conversation) => ({
+      conversation,
+      lastMessage: lastMessages.get(conversation.id) ?? null,
+      unreadCount: unreadCounts.get(conversation.id) ?? 0,
+    }))
+  }
+
+  /**
+   * Renvoie la conversation uniquement si l'utilisateur en est membre.
+   * Sinon la recherche échoue et l'application répond « page introuvable »,
+   * comme si la conversation n'existait pas.
+   */
+  async findForMember(user: User, conversationId: number) {
+    return Conversation.query()
+      .where('id', conversationId)
+      .whereHas('members', (members) => {
+        members.where('user_id', user.id)
+      })
+      .preload('members', (members) => {
+        members.preload('user')
+      })
+      .firstOrFail()
+  }
+
+  /**
+   * Comme findForMember, mais uniquement pour un groupe.
+   */
+  async findGroupForMember(user: User, conversationId: number) {
+    return Conversation.query()
+      .where('id', conversationId)
+      .where('type', 'group')
+      .whereHas('members', (members) => {
+        members.where('user_id', user.id)
+      })
+      .preload('members', (members) => {
+        members.preload('user')
+      })
+      .firstOrFail()
+  }
+
+  /**
+   * Indique si l'utilisateur est membre de la conversation. Sert aussi à
+   * autoriser l'abonnement au canal temps réel de la conversation.
+   */
+  async isMember(userId: number, conversationId: number) {
+    const membership = await ConversationMember.query()
+      .where('conversation_id', conversationId)
+      .where('user_id', userId)
+      .first()
+
+    return membership !== null
+  }
+
+  /**
+   * Derniers messages d'une conversation vus par l'utilisateur (sans ceux
+   * qu'il a masqués), dans l'ordre chronologique, avec leur auteur.
+   */
+  async history(conversation: Conversation, viewer: User) {
+    const messages = await Message.query()
+      .where('conversation_id', conversation.id)
+      .whereRaw(NOT_HIDDEN_FOR_USER, [viewer.id])
+      .preload('sender')
+      .preload('attachments')
+      .orderBy('id', 'desc')
+      .limit(HISTORY_LIMIT)
+
+    return messages.reverse()
+  }
+
+  /**
+   * Dernier message visible d'une conversation pour l'utilisateur.
+   */
+  async lastMessageOf(conversation: Conversation, viewer: User) {
+    const lastMessages = await this.lastMessagesOf([conversation.id], viewer)
+
+    return lastMessages.get(conversation.id) ?? null
+  }
+
+  /**
+   * Recherche les messages d'une conversation contenant un terme,
+   * sans ceux masqués ou supprimés.
+   */
+  async search(conversation: Conversation, viewer: User, term: string) {
+    const trimmed = term.trim()
+    if (!trimmed) {
+      return []
+    }
+
+    return Message.query()
+      .where('conversation_id', conversation.id)
+      .whereNull('deleted_at')
+      .whereRaw(NOT_HIDDEN_FOR_USER, [viewer.id])
+      .whereILike('body', `%${trimmed}%`)
+      .preload('sender')
+      .orderBy('id', 'desc')
+      .limit(50)
+  }
+
+  /**
+   * Démarre une conversation privée avec un autre utilisateur, ou renvoie
+   * celle qui existe déjà entre eux.
+   */
+  async startPrivate(user: User, otherUserId: number) {
+    const other = await User.query()
+      .where('id', otherUserId)
+      .whereNotNull('email_verified_at')
+      .firstOrFail()
+
+    /**
+     * Clé identique quel que soit celui qui démarre : « 3-7 » pour les
+     * utilisateurs 3 et 7. La base interdit deux conversations avec la
+     * même clé.
+     */
+    const privateKey = [user.id, other.id].sort((a, b) => a - b).join('-')
+
+    const existing = await Conversation.findBy('private_key', privateKey)
+    if (existing) {
+      await this.ensureMembers(existing, [user.id, other.id])
+      return existing
+    }
+
+    try {
+      return await db.transaction(async (trx) => {
+        const conversation = await Conversation.create(
+          { type: 'private', privateKey, createdBy: user.id },
+          { client: trx }
+        )
+
+        await ConversationMember.createMany(
+          [
+            { conversationId: conversation.id, userId: user.id, role: 'member' },
+            { conversationId: conversation.id, userId: other.id, role: 'member' },
+          ],
+          { client: trx }
+        )
+
+        return conversation
+      })
+    } catch (error) {
+      /**
+       * Les deux utilisateurs ont démarré la conversation en même temps :
+       * la contrainte d'unicité a refusé la seconde, on relit la première.
+       */
+      const concurrent = await Conversation.findBy('private_key', privateKey)
+      if (concurrent) {
+        await this.ensureMembers(concurrent, [user.id, other.id])
+        return concurrent
+      }
+      throw error
+    }
+  }
+
+  /**
+   * Quitte une conversation : la discussion disparaît de la liste de
+   * l'utilisateur. Pour un groupe, un autre administrateur est promu si besoin.
+   */
+  async leave(user: User, conversationId: number) {
+    const conversation = await this.findForMember(user, conversationId)
+
+    await db.transaction(async (trx) => {
+      const membership = await ConversationMember.query({ client: trx })
+        .where('conversation_id', conversation.id)
+        .where('user_id', user.id)
+        .firstOrFail()
+
+      await membership.useTransaction(trx).delete()
+
+      if (conversation.type === 'group') {
+        const remaining = await ConversationMember.query({ client: trx })
+          .where('conversation_id', conversation.id)
+          .orderBy('joined_at', 'asc')
+
+        if (remaining.length > 0 && !remaining.some((member) => member.role === 'admin')) {
+          remaining[0].role = 'admin'
+          await remaining[0].useTransaction(trx).save()
+        }
+      }
+    })
+
+    return conversation
+  }
+
+  private async ensureMembers(conversation: Conversation, userIds: number[]) {
+    for (const userId of userIds) {
+      await ConversationMember.firstOrCreate(
+        { conversationId: conversation.id, userId },
+        { role: 'member' }
+      )
+    }
+  }
+
+  /**
+   * Dernier message visible de chacune des conversations, en une seule
+   * requête, avec son auteur.
+   */
+  private async lastMessagesOf(conversationIds: number[], viewer: User) {
+    const lastMessages = new Map<number, Message>()
+    if (conversationIds.length === 0) {
+      return lastMessages
+    }
+
+    const latestIds = db
+      .from('messages')
+      .whereIn('conversation_id', conversationIds)
+      .whereRaw(NOT_HIDDEN_FOR_USER, [viewer.id])
+      .groupBy('conversation_id')
+      .max('id')
+
+    const messages = await Message.query()
+      .whereIn('id', latestIds)
+      .preload('sender')
+      .preload('attachments')
+    for (const message of messages) {
+      lastMessages.set(message.conversationId, message)
+    }
+
+    return lastMessages
+  }
+
+  /**
+   * Nombre de messages non lus pour chacune des conversations.
+   */
+  async unreadCountsFor(conversationIds: number[], viewer: User): Promise<Map<number, number>> {
+    const unreadMap = new Map<number, number>()
+    if (conversationIds.length === 0) {
+      return unreadMap
+    }
+
+    const notHiddenQuery = NOT_HIDDEN_FOR_USER.replace(/messages\./g, 'm.')
+
+    const rows = await db
+      .from('messages as m')
+      .join('conversation_members as cm', 'cm.conversation_id', 'm.conversation_id')
+      .where('cm.user_id', viewer.id)
+      .whereIn('m.conversation_id', conversationIds)
+      .where('m.sender_id', '!=', viewer.id)
+      .whereNull('m.deleted_at')
+      .whereRaw('m.id > COALESCE(cm.last_read_message_id, 0)')
+      .whereRaw(notHiddenQuery, [viewer.id])
+      .groupBy('m.conversation_id')
+      .select('m.conversation_id')
+      .count('* as total')
+
+    for (const row of rows) {
+      unreadMap.set(Number(row.conversation_id), Number(row.total))
+    }
+
+    return unreadMap
+  }
+
+  /**
+   * Marque tous les messages actuels de la conversation comme lus pour cet utilisateur.
+   */
+  async markAsRead(conversationId: number, userId: number) {
+    const latestMessage = await Message.query()
+      .where('conversation_id', conversationId)
+      .orderBy('id', 'desc')
+      .first()
+
+    if (latestMessage) {
+      await ConversationMember.query()
+        .where('conversation_id', conversationId)
+        .where('user_id', userId)
+        .where((q) => {
+          q.whereNull('last_read_message_id').orWhere('last_read_message_id', '<', latestMessage.id)
+        })
+        .update({ last_read_message_id: latestMessage.id })
+    }
+  }
+}
+
+===== app/services/conversation_presenter.ts =====
+import { DateTime } from 'luxon'
+import type Conversation from '#models/conversation'
+import type Message from '#models/message'
+import type User from '#models/user'
+import AvatarService from '#services/avatar_service'
+import type { ConversationWithLastMessage } from '#services/conversation_service'
+import { dayKey, formatDayLabel, formatListDate, formatMessageTime } from '#services/date_formatter'
+import { isWithinEditWindow } from '#services/message_rules'
+
+export type ConversationCard = {
+  id: number
+  title: string
+  initials: string
+  avatarUrl: string | null
+  preview: string
+  time: string
+  isGroup: boolean
+  unreadCount: number
+}
+
+export type ConversationHeader = {
+  title: string
+  initials: string
+  avatarUrl: string | null
+  isGroup: boolean
+  memberCount: number
+  otherUserId: number | null
+  isOnline: boolean
+}
+
+export type MessageAttachmentView = {
+  id: number
+  originalName: string
+  storagePath: string
+  mimeType: string
+  isImage: boolean
+  isVideo: boolean
+  sizeLabel: string
+}
+
+export type MessageBubble = {
+  id: number
+  body: string
+  isMine: boolean
+  isDeleted: boolean
+  isEdited: boolean
+  canEdit: boolean
+  canDeleteForEveryone: boolean
+  time: string
+  authorName: string | null
+  authorColor: number
+  attachments: MessageAttachmentView[]
+}
+
+export type MessageGroup = {
+  label: string
+  messages: MessageBubble[]
+}
+
+export type GroupMemberView = {
+  id: number
+  name: string
+  initials: string
+  avatarUrl: string | null
+  isAdmin: boolean
+  isMe: boolean
+}
+
+/**
+ * Prépare les données affichées par les vues des conversations : titres,
+ * aperçus, heures, auteurs et regroupement des messages par jour.
+ */
+export default class ConversationPresenter {
+  private avatars = new AvatarService()
+
+  /**
+   * Indique si les messages d'une conversation doivent afficher leur auteur.
+   */
+  showsAuthors(conversation: Conversation) {
+    return conversation.type === 'group'
+  }
+
+  /**
+   * Cartes de la liste des conversations.
+   */
+  async cards(items: ConversationWithLastMessage[], viewer: User): Promise<ConversationCard[]> {
+    return Promise.all(
+      items.map(async ({ conversation, lastMessage, unreadCount }) => {
+        const identity = await this.identity(conversation, viewer)
+
+        return {
+          id: conversation.id,
+          ...identity,
+          preview: this.previewOf(lastMessage, viewer, this.showsAuthors(conversation)),
+          time: lastMessage ? formatListDate(lastMessage.createdAt) : '',
+          isGroup: conversation.type === 'group',
+          unreadCount: unreadCount ?? 0,
+        }
+      })
+    )
+  }
+
+  /**
+   * En-tête d'une conversation ouverte.
+   */
+  async header(conversation: Conversation, viewer: User): Promise<ConversationHeader> {
+    const isGroup = conversation.type === 'group'
+    const otherMember = !isGroup
+      ? conversation.members.find((member) => member.userId !== viewer.id)
+      : null
+
+    const otherUser = otherMember?.user
+    const isOnline = Boolean(
+      otherUser?.lastSeenAt && DateTime.now().diff(otherUser.lastSeenAt, 'minutes').minutes < 2
+    )
+
+    return {
+      ...(await this.identity(conversation, viewer)),
+      isGroup,
+      memberCount: conversation.members.length,
+      otherUserId: otherUser?.id ?? null,
+      isOnline,
+    }
+  }
+
+  /**
+   * Membres d'un groupe : les administrateurs d'abord, puis par ordre
+   * alphabétique.
+   */
+  async members(conversation: Conversation, viewer: User): Promise<GroupMemberView[]> {
+    const nameOf = (member: Conversation['members'][number]) =>
+      member.user.fullName ?? member.user.email
+
+    const sorted = [...conversation.members].sort((a, b) => {
+      const byRole = (a.role === 'admin' ? 0 : 1) - (b.role === 'admin' ? 0 : 1)
+      return byRole !== 0 ? byRole : nameOf(a).localeCompare(nameOf(b), 'fr')
+    })
+
+    return Promise.all(
+      sorted.map(async (member) => ({
+        id: member.userId,
+        name: nameOf(member),
+        initials: member.user.initials,
+        avatarUrl: await this.avatars.urlFor(member.user),
+        isAdmin: member.role === 'admin',
+        isMe: member.userId === viewer.id,
+      }))
+    )
+  }
+
+  /**
+   * Une bulle de message, avec les actions que l'utilisateur peut faire
+   * dessus. C'est le serveur qui fait respecter ces règles : l'interface ne
+   * fait que cacher les boutons non permis. Dans un groupe, la bulle des
+   * autres affiche le nom de son auteur (le message doit avoir son auteur
+   * chargé).
+   */
+  bubble(message: Message, viewer: User, showAuthor: boolean): MessageBubble {
+    const isDeleted = Boolean(message.deletedAt)
+    const isMine = message.senderId === viewer.id
+
+    return {
+      id: message.id,
+      body: isDeleted ? '' : (message.body ?? ''),
+      isMine,
+      isDeleted,
+      isEdited: Boolean(message.editedAt) && !isDeleted,
+      canEdit:
+        isMine &&
+        !isDeleted &&
+        Boolean(message.body?.trim()) &&
+        isWithinEditWindow(message.createdAt),
+      canDeleteForEveryone: isMine && !isDeleted,
+      time: formatMessageTime(message.createdAt),
+      authorName: showAuthor && !isMine ? (message.sender?.fullName ?? 'Membre') : null,
+      authorColor: message.senderId % 6,
+      attachments: isDeleted ? [] : this.attachmentsOf(message),
+    }
+  }
+
+  /**
+   * Données du morceau de HTML renvoyé après une action sur un message : la
+   * bulle et, si c'est le premier message du jour, l'intitulé du jour.
+   */
+  fragment(message: Message, viewer: User, startsNewDay: boolean, showAuthor: boolean) {
+    return {
+      message: this.bubble(message, viewer, showAuthor),
+      dayLabel: startsNewDay ? formatDayLabel(message.createdAt) : null,
+    }
+  }
+
+  /**
+   * Messages regroupés par jour, avec un intitulé pour chaque jour.
+   */
+  groupMessages(messages: Message[], viewer: User, showAuthor: boolean): MessageGroup[] {
+    const groups: MessageGroup[] = []
+    let currentDay = ''
+
+    for (const message of messages) {
+      const day = dayKey(message.createdAt)
+
+      if (day !== currentDay) {
+        groups.push({ label: formatDayLabel(message.createdAt), messages: [] })
+        currentDay = day
+      }
+
+      groups[groups.length - 1].messages.push(this.bubble(message, viewer, showAuthor))
+    }
+
+    return groups
+  }
+
+  /**
+   * Nom, initiales et photo à afficher pour une conversation : l'autre
+   * participant pour une conversation privée, le groupe sinon.
+   */
+  private async identity(conversation: Conversation, viewer: User) {
+    if (conversation.type === 'group') {
+      const title = conversation.name ?? 'Groupe'
+      return {
+        title,
+        initials: this.initialsOf(title),
+        avatarUrl: await this.avatars.urlForKey(conversation.avatarPath),
+      }
+    }
+
+    const other = conversation.members.find((member) => member.userId !== viewer.id)?.user
+    if (!other) {
+      return { title: 'Utilisateur introuvable', initials: '?', avatarUrl: null }
+    }
+
+    return {
+      title: other.fullName ?? other.email,
+      initials: other.initials,
+      avatarUrl: await this.avatars.urlFor(other),
+    }
+  }
+
+  /**
+   * Aperçu du dernier message : « Vous : … » pour l'utilisateur, et dans un
+   * groupe « Alice : … » pour les autres.
+   */
+  private previewOf(message: Message | null, viewer: User, isGroup: boolean) {
+    if (!message) {
+      return 'Aucun message'
+    }
+    if (message.deletedAt) {
+      return 'Message supprimé'
+    }
+
+    let text = (message.body ?? '').replace(/\s+/g, ' ').trim()
+    if (!text && message.attachments && message.attachments.length > 0) {
+      const hasVideo = message.attachments.some((file) => file.mimeType.startsWith('video/'))
+      const hasImage = message.attachments.some((file) => file.mimeType.startsWith('image/'))
+      if (hasVideo) {
+        text = '🎬 Vidéo'
+      } else if (hasImage) {
+        text = '📷 Photo'
+      } else {
+        text = '📎 Fichier'
+      }
+    }
+
+    const clipped = text.length > 80 ? `${text.slice(0, 80)}…` : text
+
+    if (message.senderId === viewer.id) {
+      return `Vous : ${clipped}`
+    }
+    if (isGroup) {
+      const firstName = message.sender?.fullName?.split(' ')[0] ?? 'Membre'
+      return `${firstName} : ${clipped}`
+    }
+    return clipped
+  }
+
+  private attachmentsOf(message: Message): MessageAttachmentView[] {
+    if (!message.attachments?.length) {
+      return []
+    }
+
+    return message.attachments.map((file) => ({
+      id: file.id,
+      originalName: file.originalName,
+      storagePath: file.storagePath,
+      mimeType: file.mimeType,
+      isImage: file.mimeType.startsWith('image/'),
+      isVideo: file.mimeType.startsWith('video/'),
+      sizeLabel: this.formatFileSize(file.sizeBytes),
+    }))
+  }
+
+  private formatFileSize(bytes: number) {
+    if (bytes < 1024) {
+      return `${bytes} o`
+    }
+    if (bytes < 1024 * 1024) {
+      return `${Math.round(bytes / 1024)} Ko`
+    }
+    return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`
+  }
+
+  private initialsOf(name: string) {
+    return name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part.charAt(0))
+      .join('')
+      .toUpperCase()
+  }
+}
+
+===== app/controllers/messages_controller.ts =====
+import type Message from '#models/message'
+import ConversationPresenter from '#services/conversation_presenter'
+import ConversationService from '#services/conversation_service'
+import MessageAttachmentService, {
+  MessageAttachmentError,
+} from '#services/message_attachment_service'
+import MessageService, { MessageNotEditableError } from '#services/message_service'
+import RealtimeService from '#services/realtime_service'
+import {
+  catchUpValidator,
+  deleteMessageValidator,
+  editMessageValidator,
+  sendMessageValidator,
+} from '#validators/message'
+import type { HttpContext } from '@adonisjs/core/http'
+
+/**
+ * MessagesController gère les messages d'une conversation : lecture,
+ * envoi, modification et suppression. Ces actions répondent par un morceau
+ * de HTML (la bulle) quand elles sont appelées par le JavaScript de la page,
+ * et par une redirection quand le formulaire est envoyé sans JavaScript.
+ * Chaque changement est annoncé en temps réel aux participants.
+ */
+export default class MessagesController {
+  private conversations = new ConversationService()
+  private messages = new MessageService()
+  private presenter = new ConversationPresenter()
+  private realtime = new RealtimeService()
+
+  /**
+   * Messages envoyés après un identifiant donné (rattrapage après une
+   * coupure de connexion), sous forme de HTML
+   */
+  async index({ auth, params, request, response, view }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conversation = await this.conversations.findForMember(user, Number(params.conversationId))
+    const { after } = await request.validateUsing(catchUpValidator)
+
+    const items = await this.messages.listAfter(user, conversation.id, after ?? 0)
+    const showAuthor = this.presenter.showsAuthors(conversation)
+
+    const parts = await Promise.all(
+      items.map(({ message, startsNewDay }) =>
+        view.render('fragments/message', {
+          conversationId: conversation.id,
+          ...this.presenter.fragment(message, user, startsNewDay, showAuthor),
+        })
+      )
+    )
+
+    return response.type('html').send(parts.join(''))
+  }
+
+  /**
+   * Une bulle de message pour l'utilisateur connecté, appelée quand un
+   * événement temps réel annonce un message nouveau ou modifié. Avec
+   * ?bare=1, sans séparateur de jour (pour remplacer une bulle existante).
+   */
+  async show({ auth, params, request, response, view }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conversation = await this.conversations.findForMember(user, Number(params.conversationId))
+
+    const message = await this.messages.findVisible(user, conversation.id, Number(params.messageId))
+    const startsNewDay =
+      request.input('bare') === '1' ? false : await this.messages.startsNewDay(message)
+
+    const html = await view.render('fragments/message', {
+      conversationId: conversation.id,
+      ...this.presenter.fragment(
+        message,
+        user,
+        startsNewDay,
+        this.presenter.showsAuthors(conversation)
+      ),
+    })
+
+    return response.type('html').send(html)
+  }
+
+  /**
+   * Envoie un message dans une conversation dont l'utilisateur est membre
+   */
+  async store({ auth, params, request, response, session, view }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conversation = await this.conversations.findForMember(user, Number(params.conversationId))
+    const payload = await request.validateUsing(sendMessageValidator)
+    const body = payload.body ?? ''
+
+    let attachments: Awaited<ReturnType<typeof MessageAttachmentService.fromRequest>> = []
+    try {
+      attachments = MessageAttachmentService.fromRequest(request)
+    } catch (error) {
+      if (error instanceof MessageAttachmentError) {
+        if (this.wantsFragment(request)) {
+          return response.status(422).json({ errors: [{ message: error.message }] })
+        }
+
+        session.flash('error', error.message)
+        return response.redirect().toRoute('conversations.show', { id: conversation.id })
+      }
+      throw error
+    }
+
+    if (!body.trim() && attachments.length === 0) {
+      if (this.wantsFragment(request)) {
+        return response.status(422).json({
+          errors: [{ message: 'Écrivez un message ou joignez un fichier.' }],
+        })
+      }
+
+      session.flash('error', 'Écrivez un message ou joignez un fichier.')
+      return response.redirect().toRoute('conversations.show', { id: conversation.id })
+    }
+
+    const { message, startsNewDay } = await this.messages.send(
+      user,
+      conversation,
+      body,
+      attachments
+    )
+    await this.conversations.markAsRead(conversation.id, user.id)
+    this.realtime.messageCreated(conversation, message)
+
+    if (!this.wantsFragment(request)) {
+      return response.redirect().toRoute('conversations.show', { id: conversation.id })
+    }
+
+    const html = await view.render('fragments/message', {
+      conversationId: conversation.id,
+      ...this.presenter.fragment(
+        message,
+        user,
+        startsNewDay,
+        this.presenter.showsAuthors(conversation)
+      ),
+    })
+
+    return response.status(201).type('html').send(html)
+  }
+
+  /**
+   * Modifie un message de l'utilisateur et renvoie la bulle mise à jour
+   */
+  async update({ auth, params, request, response, session, view }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conversation = await this.conversations.findForMember(user, Number(params.conversationId))
+    const { body } = await request.validateUsing(editMessageValidator)
+
+    let message: Message
+    try {
+      message = await this.messages.edit(user, conversation.id, Number(params.messageId), body)
+    } catch (error) {
+      if (error instanceof MessageNotEditableError) {
+        if (this.wantsFragment(request)) {
+          return response.status(422).json({ errors: [{ message: error.message }] })
+        }
+
+        session.flash('error', error.message)
+        return response.redirect().toRoute('conversations.show', { id: conversation.id })
+      }
+      throw error
+    }
+
+    this.realtime.messageUpdated(conversation, message)
+
+    if (!this.wantsFragment(request)) {
+      return response.redirect().toRoute('conversations.show', { id: conversation.id })
+    }
+
+    const html = await view.render('fragments/message', {
+      conversationId: conversation.id,
+      ...this.presenter.fragment(message, user, false, this.presenter.showsAuthors(conversation)),
+    })
+
+    return response.type('html').send(html)
+  }
+
+  /**
+   * Supprime un message : pour l'utilisateur seul (« me ») ou pour tous
+   * (« everyone », réservé à l'auteur)
+   */
+  async destroy({ auth, params, request, response, view }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conversation = await this.conversations.findForMember(user, Number(params.conversationId))
+    const { scope } = await request.validateUsing(deleteMessageValidator)
+    const messageId = Number(params.messageId)
+
+    if (scope === 'me') {
+      await this.messages.hideForUser(user, conversation.id, messageId)
+
+      if (!this.wantsFragment(request)) {
+        return response.redirect().toRoute('conversations.show', { id: conversation.id })
+      }
+      return response.noContent()
+    }
+
+    const message = await this.messages.deleteForEveryone(user, conversation.id, messageId)
+    this.realtime.messageUpdated(conversation, message)
+
+    if (!this.wantsFragment(request)) {
+      return response.redirect().toRoute('conversations.show', { id: conversation.id })
+    }
+
+    const html = await view.render('fragments/message', {
+      conversationId: conversation.id,
+      ...this.presenter.fragment(message, user, false, this.presenter.showsAuthors(conversation)),
+    })
+
+    return response.type('html').send(html)
+  }
+
+  /**
+   * Le JavaScript de la page signale ses appels avec cet en-tête.
+   */
+  private wantsFragment(request: HttpContext['request']) {
+    return request.header('x-chat-fetch') === '1'
+  }
+}
+
+===== app/controllers/conversations_controller.ts =====
+import ConversationPresenter from '#services/conversation_presenter'
+import ConversationService from '#services/conversation_service'
+import RealtimeService from '#services/realtime_service'
+import { startConversationValidator } from '#validators/conversation'
+import type { HttpContext } from '@adonisjs/core/http'
+
+/**
+ * ConversationsController gère les conversations de l'utilisateur connecté :
+ * liste, ouverture d'une conversation et démarrage d'une conversation privée.
+ */
+export default class ConversationsController {
+  private conversations = new ConversationService()
+  private presenter = new ConversationPresenter()
+  private realtime = new RealtimeService()
+
+  /**
+   * Liste des conversations (page d'accueil de l'utilisateur connecté)
+   */
+  async index({ auth, view }: HttpContext) {
+    const user = auth.getUserOrFail()
+
+    const items = await this.conversations.listFor(user)
+
+    return view.render('pages/conversations/index', {
+      conversations: await this.presenter.cards(items, user),
+    })
+  }
+
+  /**
+   * Ouvre une conversation et affiche son historique. Répond « introuvable »
+   * si l'utilisateur n'en est pas membre.
+   */
+  async show({ auth, params, view }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conversationId = Number(params.id)
+
+    const conversation = await this.conversations.findForMember(user, conversationId)
+    await this.conversations.markAsRead(conversation.id, user.id)
+
+    const [items, messages] = await Promise.all([
+      this.conversations.listFor(user),
+      this.conversations.history(conversation, user),
+    ])
+
+    return view.render('pages/conversations/show', {
+      activeId: conversation.id,
+      conversations: await this.presenter.cards(items, user),
+      header: await this.presenter.header(conversation, user),
+      groups: this.presenter.groupMessages(
+        messages,
+        user,
+        this.presenter.showsAuthors(conversation)
+      ),
+    })
+  }
+
+  /**
+   * Renvoie la carte d'une conversation (morceau de HTML) pour rafraîchir la
+   * liste en temps réel. Si l'utilisateur n'est plus membre, la réponse est
+   * « introuvable » et sa liste retire la carte.
+   */
+  async card({ auth, params, request, view }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conversationId = Number(params.id)
+
+    const conversation = await this.conversations.findForMember(user, conversationId)
+    const isActive = conversation.id === Number(request.input('active'))
+
+    if (isActive) {
+      await this.conversations.markAsRead(conversation.id, user.id)
+    }
+
+    const lastMessage = await this.conversations.lastMessageOf(conversation, user)
+    const unreadMap = await this.conversations.unreadCountsFor([conversation.id], user)
+    const unreadCount = isActive ? 0 : (unreadMap.get(conversation.id) ?? 0)
+
+    const [item] = await this.presenter.cards([{ conversation, lastMessage, unreadCount }], user)
+
+    return view.render('fragments/conversation_card', {
+      item,
+      active: isActive,
+    })
+  }
+
+  /**
+   * Marque la conversation comme lue par l'utilisateur connecté
+   */
+  async read({ auth, params, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conversationId = Number(params.id)
+
+    const conversation = await this.conversations.findForMember(user, conversationId)
+    await this.conversations.markAsRead(conversation.id, user.id)
+
+    return response.noContent()
+  }
+
+  /**
+   * Diffuse le signal « en train d'écrire » aux autres membres de la conversation
+   */
+  async typing({ auth, params, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conversationId = Number(params.id)
+
+    const isMember = await this.conversations.isMember(user.id, conversationId)
+    if (!isMember) {
+      return response.forbidden()
+    }
+
+    this.realtime.userTyping(conversationId, user)
+
+    return response.noContent()
+  }
+
+  /**
+   * Recherche des messages dans une conversation
+   */
+  async search({ auth, params, request, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conversationId = Number(params.id)
+
+    const conversation = await this.conversations.findForMember(user, conversationId)
+    const term = String(request.input('q', '')).trim()
+
+    const results = await this.conversations.search(conversation, user, term)
+
+    return response.json(
+      results.map((msg) => ({
+        id: msg.id,
+        body: msg.body,
+        time: msg.createdAt.toFormat('HH:mm'),
+        senderName: msg.sender?.fullName ?? msg.sender?.email,
+      }))
+    )
+  }
+
+  /**
+   * Démarre une conversation privée (ou ouvre celle qui existe déjà)
+   */
+  async store({ auth, request, response, session }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const { userId } = await request.validateUsing(startConversationValidator)
+
+    if (userId === user.id) {
+      session.flash('error', 'Vous ne pouvez pas démarrer une discussion avec vous-même.')
+      return response.redirect().toRoute('users.index')
+    }
+
+    const conversation = await this.conversations.startPrivate(user, userId)
+
+    return response.redirect().toRoute('conversations.show', { id: conversation.id })
+  }
+
+  /**
+   * Quitte une conversation : elle disparaît de la liste de l'utilisateur.
+   */
+  async destroy({ auth, params, response, session }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conversationId = Number(params.id)
+
+    const conversation = await this.conversations.findForMember(user, conversationId)
+    const notifyUserIds = conversation.members.map((member) => member.userId)
+
+    await this.conversations.leave(user, conversationId)
+    this.realtime.membersChanged(conversation, notifyUserIds)
+
+    session.flash('success', 'La discussion a été supprimée de votre liste.')
+    return response.redirect().toRoute('dashboard')
+  }
+}
+
+===== start/transmit.ts =====
+import transmit from '@adonisjs/transmit/services/main'
+import ConversationService from '#services/conversation_service'
+
+const conversations = new ConversationService()
+
+/**
+ * Canal d'une conversation : seuls ses membres peuvent s'y abonner.
+ */
+transmit.authorize<{ conversationId: string }>(
+  'conversations/:conversationId',
+  async (ctx, { conversationId }) => {
+    const user = ctx.auth.user
+    if (!user) {
+      return false
+    }
+
+    return conversations.isMember(user.id, Number(conversationId))
+  }
+)
+
+/**
+ * Canal personnel : chacun ne peut s'abonner qu'au sien.
+ */
+transmit.authorize<{ id: string }>('users/:id', (ctx, { id }) => {
+  return ctx.auth.user?.id === Number(id)
+})
+
+===== start/routes.ts =====
+/*
+|--------------------------------------------------------------------------
+| Routes file
+|--------------------------------------------------------------------------
+|
+| The routes file is used for defining the HTTP routes.
+|
+*/
+
+import transmit from '@adonisjs/transmit/services/main'
+import { middleware } from '#start/kernel'
+import { messageThrottle, sensitiveThrottle } from '#start/limiter'
+import { controllers } from '#generated/controllers'
+import router from '@adonisjs/core/services/router'
+
+/**
+ * Routes du temps réel (connexion, abonnement, désabonnement) : réservées
+ * aux utilisateurs connectés.
+ */
+transmit.registerRoutes((route) => {
+  route.middleware(middleware.auth())
+})
+
+router.on('/').render('pages/home').as('home')
+
+router
+  .group(() => {
+    router.get('signup', [controllers.NewAccount, 'create'])
+    router.post('signup', [controllers.NewAccount, 'store']).use(sensitiveThrottle)
+
+    router.get('login', [controllers.Session, 'create'])
+    router.post('login', [controllers.Session, 'store']).use(sensitiveThrottle)
+
+    router.get('email/verification', [controllers.EmailVerification, 'notice'])
+    router.get('email/verify/:token', [controllers.EmailVerification, 'verify'])
+    router
+      .post('email/verification/resend', [controllers.EmailVerification, 'resend'])
+      .use(sensitiveThrottle)
+
+    router.get('forgot-password', [controllers.PasswordReset, 'create'])
+    router.post('forgot-password', [controllers.PasswordReset, 'store']).use(sensitiveThrottle)
+    router.get('reset-password/:token', [controllers.PasswordReset, 'edit'])
+    router.post('reset-password/:token', [controllers.PasswordReset, 'update'])
+  })
+  .use(middleware.guest())
+
+router
+  .group(() => {
+    router.post('logout', [controllers.Session, 'destroy'])
+    router.post('presence/ping', [controllers.Session, 'ping'])
+
+    router.get('dashboard', [controllers.Conversations, 'index']).as('dashboard')
+    router
+      .get('conversations/:id', [controllers.Conversations, 'show'])
+      .where('id', router.matchers.number())
+    router
+      .get('conversations/:id/card', [controllers.Conversations, 'card'])
+      .where('id', router.matchers.number())
+    router
+      .post('conversations/:id/delete', [controllers.Conversations, 'destroy'])
+      .where('id', router.matchers.number())
+    router
+      .post('conversations/:id/read', [controllers.Conversations, 'read'])
+      .where('id', router.matchers.number())
+    router
+      .post('conversations/:id/typing', [controllers.Conversations, 'typing'])
+      .where('id', router.matchers.number())
+    router
+      .get('conversations/:id/search', [controllers.Conversations, 'search'])
+      .where('id', router.matchers.number())
+    router.post('conversations', [controllers.Conversations, 'store'])
+
+    router.get('groups/new', [controllers.Groups, 'create'])
+    router.post('groups', [controllers.Groups, 'store'])
+
+    router
+      .get('conversations/:conversationId/members', [controllers.GroupMembers, 'index'])
+      .where('conversationId', router.matchers.number())
+    router
+      .post('conversations/:conversationId/members', [controllers.GroupMembers, 'store'])
+      .where('conversationId', router.matchers.number())
+    router
+      .post('conversations/:conversationId/members/:userId/delete', [
+        controllers.GroupMembers,
+        'destroy',
+      ])
+      .where('conversationId', router.matchers.number())
+      .where('userId', router.matchers.number())
+    router
+      .post('conversations/:conversationId/avatar', [controllers.GroupMembers, 'updateAvatar'])
+      .where('conversationId', router.matchers.number())
+    router
+      .post('conversations/:conversationId/avatar/delete', [
+        controllers.GroupMembers,
+        'destroyAvatar',
+      ])
+      .where('conversationId', router.matchers.number())
+
+    router
+      .get('conversations/:conversationId/messages', [controllers.Messages, 'index'])
+      .where('conversationId', router.matchers.number())
+    router
+      .get('conversations/:conversationId/messages/:messageId', [controllers.Messages, 'show'])
+      .where('conversationId', router.matchers.number())
+      .where('messageId', router.matchers.number())
+    router
+      .post('conversations/:conversationId/messages', [controllers.Messages, 'store'])
+      .where('conversationId', router.matchers.number())
+      .use(messageThrottle)
+    router
+      .post('conversations/:conversationId/messages/:messageId/edit', [
+        controllers.Messages,
+        'update',
+      ])
+      .where('conversationId', router.matchers.number())
+      .where('messageId', router.matchers.number())
+    router
+      .post('conversations/:conversationId/messages/:messageId/delete', [
+        controllers.Messages,
+        'destroy',
+      ])
+      .where('conversationId', router.matchers.number())
+      .where('messageId', router.matchers.number())
+
+    router.get('users', [controllers.Users, 'index'])
+
+    router.get('profile', [controllers.Profile, 'show'])
+    router.post('profile', [controllers.Profile, 'update'])
+    router.post('profile/avatar', [controllers.Profile, 'updateAvatar'])
+    router.post('profile/avatar/delete', [controllers.Profile, 'destroyAvatar'])
+    router.post('profile/password', [controllers.Profile, 'updatePassword'])
+  })
+  .use(middleware.auth())
+
+===== resources/views/components/message_bubble.edge =====
+@let(message = $props.get('message'))
+@let(conversationId = $props.get('conversationId'))
+@let(actionParams = { conversationId: conversationId, messageId: message.id })
+@let(authorColors = [
+  'text-rose-600',
+  'text-sky-600',
+  'text-emerald-600',
+  'text-amber-600',
+  'text-violet-600',
+  'text-teal-600',
+])
+
+<div
+  id="message-{{ message.id }}"
+  data-message-id="{{ message.id }}"
+  x-data="messageBubble"
+  x-on:keydown.escape="close()"
+  class="flex {{ message.isMine ? 'justify-end' : 'justify-start' }}"
+>
+  <div
+    class="flex max-w-[85%] flex-col sm:max-w-[70%] {{ message.isMine ? 'items-end' : 'items-start' }}"
+  >
+    {{-- La bulle : un appui ouvre le menu d'actions --}}
+    <div
+      x-show="mode !== 'edit'"
+      role="button"
+      tabindex="0"
+      x-on:click="toggle()"
+      x-on:keydown.enter="toggle()"
+      class="cursor-pointer rounded-2xl px-4 py-2.5 {{
+        message.isDeleted
+          ? 'border border-dashed border-line text-muted'
+          : message.isMine
+            ? 'rounded-br-md bg-brand text-white'
+            : 'rounded-bl-md bg-white text-ink shadow-card'
+      }}"
+    >
+      @if(message.authorName && !message.isDeleted)
+        <p class="mb-0.5 text-xs font-bold {{ authorColors[message.authorColor] }}">
+          {{ message.authorName }}
+        </p>
+      @end
+      @if(message.isDeleted)
+        <p class="flex items-center gap-1.5 text-sm italic">
+          @svg('lucide:ban', { width: 14, height: 14 })
+          
+          Ce message a été supprimé
+
+        </p>
+      @else
+        @if(message.body)
+          <p
+            data-message-body
+            class="whitespace-pre-wrap text-[15px] leading-relaxed [overflow-wrap:anywhere]"
+          >
+            {{ message.body }}
+          </p>
+        @end
+        @if(message.attachments?.length)
+          <div class="{{ message.body ? 'mt-2' : '' }} flex flex-col gap-2">
+            @each(file in message.attachments)
+              @let(fileUrl = await driveUrl(file.storagePath))
+              @if(file.isImage)
+                <button
+                  type="button"
+                  data-zoom-src="{{ fileUrl }}"
+                  data-zoom-alt="{{ file.originalName }}"
+                  x-on:click.stop
+                  class="block max-w-full overflow-hidden rounded-xl {{
+                    message.isMine
+                      ? 'ring-1 ring-white/30'
+                      : 'ring-1 ring-line'
+                  }}"
+                >
+                  <img
+                    src="{{ fileUrl }}"
+                    alt="{{ file.originalName }}"
+                    class="max-h-64 w-full object-cover"
+                    loading="lazy"
+                  />
+                </button>
+              @elseif(file.isVideo)
+                <video
+                  x-on:click.stop
+                  controls
+                  playsinline
+                  preload="metadata"
+                  class="max-h-72 w-full rounded-xl {{
+                    message.isMine
+                      ? 'ring-1 ring-white/30'
+                      : 'ring-1 ring-line'
+                  }}"
+                >
+                  <source src="{{ fileUrl }}" type="{{ file.mimeType }}" />
+                </video>
+              @else
+                <a
+                  href="{{ fileUrl }}"
+                  download="{{ file.originalName }}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  x-on:click.stop
+                  class="flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm {{
+                    message.isMine
+                      ? 'border-white/30 bg-white/10 hover:bg-white/15'
+                      : 'border-line bg-paper hover:bg-white'
+                  }}"
+                >
+                  @svg('lucide:paperclip', { width: 16, height: 16 })
+                  <span class="min-w-0 flex-1 truncate font-semibold">{{ file.originalName }}</span>
+                  <span class="text-xs opacity-80">{{ file.sizeLabel }}</span>
+                </a>
+              @end
+            @end
+          </div>
+        @end
+      @end
+
+      <p
+        class="mt-1 text-right text-[11px] {{
+          message.isDeleted
+            ? 'text-muted'
+            : message.isMine
+              ? 'text-white/70'
+              : 'text-muted'
+        }}"
+      >
+        {{ message.isEdited ? 'modifié · ' : '' }}{{ message.time }}
+      </p>
+    </div>
+    {{-- Éditeur : remplace la bulle pendant la modification --}}
+    @if(message.canEdit)
+      <div x-show="mode === 'edit'" x-cloak class="w-[min(80vw,28rem)]">
+        @form({
+          route: 'messages.update',
+          routeParams: actionParams,
+          method: 'POST',
+          class: 'flex flex-col gap-2',
+          'data-message-edit': true,
+        })
+          <label for="edit-{{ message.id }}" class="sr-only">Modifier le message</label>
+          <textarea
+            id="edit-{{ message.id }}"
+            name="body"
+            rows="2"
+            maxlength="2000"
+            required
+            x-ref="editField"
+            x-on:keydown.escape.stop="cancelEdit()"
+            class="w-full resize-none rounded-2xl border border-brand bg-white px-4 py-3 text-[15px] leading-6 outline-none ring-4 ring-brand/15"
+          >{{ message.body }}</textarea>
+          <div class="flex justify-end gap-2">
+            <button
+              type="button"
+              x-on:click="cancelEdit()"
+              class="inline-flex min-h-11 cursor-pointer items-center rounded-xl px-4 text-sm font-semibold text-muted transition hover:bg-white"
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              class="inline-flex min-h-11 cursor-pointer items-center rounded-xl bg-brand px-4 text-sm font-semibold text-white"
+            >
+              Enregistrer
+            </button>
+          </div>
+        @end
+      </div>
+    @end
+    {{-- Menu d'actions --}}
+    <div
+      x-show="menu && mode === 'actions'"
+      x-cloak
+      x-transition
+      class="mt-1.5 flex flex-wrap items-center gap-1"
+    >
+      @if(message.canEdit)
+        <button
+          type="button"
+          x-on:click="startEdit()"
+          class="inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-muted transition hover:bg-white hover:text-ink"
+        >
+          @svg('lucide:pencil', { width: 15, height: 15 })
+          
+          Modifier
+
+        </button>
+      @end
+
+      <button
+        type="button"
+        x-on:click="mode = 'delete'"
+        class="inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-muted transition hover:bg-white hover:text-brand"
+      >
+        @svg('lucide:trash-2', { width: 15, height: 15 })
+        
+        Supprimer
+
+      </button>
+    </div>
+    {{-- Choix du type de suppression --}}
+    <div
+      x-show="menu && mode === 'delete'"
+      x-cloak
+      x-transition
+      class="mt-1.5 flex flex-wrap items-center gap-1"
+    >
+      @form({
+        route: 'messages.destroy',
+        routeParams: actionParams,
+        method: 'POST',
+        'data-message-delete': 'me',
+      })
+        <input type="hidden" name="scope" value="me" />
+        <button
+          type="submit"
+          class="inline-flex min-h-11 cursor-pointer items-center rounded-xl px-3 text-sm font-semibold text-muted transition hover:bg-white hover:text-brand"
+        >
+          Pour moi
+        </button>
+      @end
+      @if(message.canDeleteForEveryone)
+        @form({
+          route: 'messages.destroy',
+          routeParams: actionParams,
+          method: 'POST',
+          'data-message-delete': 'everyone',
+        })
+          <input type="hidden" name="scope" value="everyone" />
+          <button
+            type="submit"
+            class="inline-flex min-h-11 cursor-pointer items-center rounded-xl bg-brand px-4 text-sm font-semibold text-white"
+          >
+            Pour tous
+          </button>
+        @end
+      @end
+
+      <button
+        type="button"
+        x-on:click="mode = 'actions'"
+        class="inline-flex min-h-11 cursor-pointer items-center rounded-xl px-3 text-sm font-semibold text-muted transition hover:bg-white"
+      >
+        Retour
+      </button>
+    </div>
+  </div>
+</div>
+
+===== resources/views/fragments/message.edge =====
+@if(dayLabel)
+  <p
+    data-day-label
+    class="mx-auto my-3 w-fit rounded-full bg-white px-3 py-1 text-xs font-semibold text-muted shadow-card"
+  >
+    {{ dayLabel }}
+  </p>
+@end
+@!messageBubble({ message: message, conversationId: conversationId })
+
+===== resources/views/pages/conversations/show.edge =====
+@layouts.messenger({ title: header.title })
+  <div class="flex min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden">
+    {{-- Liste : visible à côté de la discussion à partir de 1024 px --}}
+    <aside
+      class="hidden min-h-0 w-[380px] max-w-full flex-none flex-col border-r border-line lg:flex"
+    >
+      @include('partials/conversation_list')
+    </aside>
+
+    <section
+      class="flex min-h-0 min-w-0 flex-1 flex-col bg-paper"
+      x-data="conversationChat"
+      x-on:submit="handleSubmit($event)"
+      data-user-id="{{ auth?.user?.id }}"
+      data-conversation-id="{{ activeId }}"
+      data-other-user-id="{{ header.otherUserId ?? '' }}"
+      data-is-online="{{ header.isOnline ? '1' : '0' }}"
+      data-message-url="{{ urlFor('messages.show', { conversationId: activeId, messageId: '0' }) }}"
+      data-catch-up-url="{{ urlFor('messages.index', { conversationId: activeId }) }}"
+    >
+      <header
+        class="flex flex-none items-center gap-3 border-b border-line bg-white px-3 py-3 sm:px-4"
+      >
+        <a
+          href="{{ urlFor('dashboard') }}"
+          aria-label="Retour aux discussions"
+          class="grid size-11 flex-none place-items-center rounded-full text-ink transition hover:bg-paper lg:hidden"
+        >
+          @svg('lucide:arrow-left', { width: 22, height: 22 })
+        </a>
+        @if(header.avatarUrl)
+          @!avatar({ src: header.avatarUrl, name: header.title, size: 44 })
+        @else
+          @!avatar({ initials: header.initials, size: 44 })
+        @end
+
+        <div class="min-w-0 flex-1">
+          @if(header.isGroup)
+            <a
+              href="{{ urlFor('group_members.index', { conversationId: activeId }) }}"
+              class="block min-w-0"
+            >
+              <h1 class="truncate text-base font-bold tracking-tight">{{ header.title }}</h1>
+              <p x-show="!typingUser" class="truncate text-xs text-muted">
+                {{ header.memberCount }}
+                membre{{ header.memberCount > 1 ? 's' : '' }}
+                · Appuyez pour voir le groupe
+              </p>
+              <p
+                x-show="typingUser"
+                x-cloak
+                class="truncate text-xs font-bold text-brand flex items-center gap-1.5"
+              >
+                <span class="inline-flex gap-0.5">
+                  <span
+                    class="size-1 rounded-full bg-brand animate-bounce [animation-delay:-0.3s]"
+                  ></span>
+                  <span
+                    class="size-1 rounded-full bg-brand animate-bounce [animation-delay:-0.15s]"
+                  ></span>
+                  <span class="size-1 rounded-full bg-brand animate-bounce"></span>
+                </span>
+                <span x-text="typingUser + ' est en train d’écrire…'"></span>
+              </p>
+            </a>
+          @else
+            <h1 class="truncate text-base font-bold tracking-tight">{{ header.title }}</h1>
+            <p
+              x-show="!typingUser && isOnline"
+              class="truncate text-xs text-emerald-600 flex items-center gap-1.5 font-semibold"
+            >
+              <span class="size-2 rounded-full bg-emerald-500 shadow-sm animate-pulse"></span>
+              <span>En ligne</span>
+            </p>
+            <p
+              x-show="!typingUser && !isOnline"
+              class="truncate text-xs text-muted flex items-center gap-1.5 font-medium"
+            >
+              <span class="size-2 rounded-full bg-zinc-300"></span>
+              <span>Hors ligne</span>
+            </p>
+            <p
+              x-show="typingUser"
+              x-cloak
+              class="truncate text-xs font-bold text-brand flex items-center gap-1.5"
+            >
+              <span class="inline-flex gap-0.5">
+                <span
+                  class="size-1 rounded-full bg-brand animate-bounce [animation-delay:-0.3s]"
+                ></span>
+                <span
+                  class="size-1 rounded-full bg-brand animate-bounce [animation-delay:-0.15s]"
+                ></span>
+                <span class="size-1 rounded-full bg-brand animate-bounce"></span>
+              </span>
+              <span>en train d’écrire…</span>
+            </p>
+          @end
+        </div>
+        {{-- Actions d'en-tête --}}
+        <div class="relative flex items-center gap-1 flex-none" x-data="{ menuOpen: false }">
+          <button
+            type="button"
+            x-on:click="toggleSearch()"
+            aria-label="Rechercher dans la discussion"
+            title="Rechercher dans la discussion"
+            class="grid size-10 place-items-center rounded-full text-muted transition hover:bg-paper hover:text-ink cursor-pointer"
+          >
+            @svg('lucide:search', { width: 19, height: 19 })
+          </button>
+
+          <button
+            type="button"
+            x-on:click="menuOpen = !menuOpen"
+            aria-label="Options de la discussion"
+            aria-haspopup="menu"
+            x-bind:aria-expanded="menuOpen"
+            class="grid size-10 place-items-center rounded-full text-muted transition hover:bg-paper hover:text-ink cursor-pointer"
+          >
+            @svg('lucide:ellipsis-vertical', { width: 19, height: 19 })
+          </button>
+
+          <div
+            x-show="menuOpen"
+            x-cloak
+            x-on:click.outside="menuOpen = false"
+            x-transition
+            role="menu"
+            class="absolute right-0 top-full z-20 mt-1 min-w-[220px] overflow-hidden rounded-2xl border border-line bg-white py-1 shadow-card"
+          >
+            @form({
+              route: 'conversations.destroy',
+              routeParams: { id: activeId },
+              method: 'POST',
+              class: 'block',
+              'x-data': '{ confirming: false }',
+            })
+              <button
+                type="button"
+                x-show="!confirming"
+                x-on:click="confirming = true"
+                role="menuitem"
+                class="flex w-full cursor-pointer items-center gap-2 px-4 py-3 text-left text-sm font-semibold text-brand transition hover:bg-paper"
+              >
+                @svg('lucide:trash-2', { width: 16, height: 16 })
+                
+                Supprimer la discussion
+
+              </button>
+              <div x-show="confirming" x-cloak class="px-3 py-2">
+                <p class="px-1 text-xs text-muted">Retirer cette discussion de votre liste ?</p>
+                <div class="mt-2 flex gap-2">
+                  <button
+                    type="submit"
+                    class="flex-1 cursor-pointer rounded-xl bg-brand px-3 py-2 text-xs font-bold text-white"
+                  >
+                    Confirmer
+                  </button>
+                  <button
+                    type="button"
+                    x-on:click="confirming = false"
+                    class="cursor-pointer rounded-xl px-3 py-2 text-xs font-semibold text-muted hover:bg-paper"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              </div>
+            @end
+          </div>
+        </div>
+      </header>
+      {{-- Barre de recherche intégrée style WhatsApp --}}
+      <div
+        x-show="searchOpen"
+        x-cloak
+        x-transition
+        class="flex flex-none items-center gap-2 border-b border-line bg-white/95 backdrop-blur px-3 py-2 sm:px-4 shadow-sm"
+      >
+        <span class="grid size-8 place-items-center text-muted flex-none">
+          @svg('lucide:search', { width: 16, height: 16 })
+        </span>
+        <input
+          type="search"
+          x-ref="searchInput"
+          x-model="searchQuery"
+          x-on:input="performSearch()"
+          x-on:keydown.escape="closeSearch()"
+          x-on:keydown.enter.prevent="nextSearchResult()"
+          placeholder="Rechercher dans cette discussion…"
+          class="h-9 min-w-0 flex-1 rounded-xl border border-line bg-paper/80 px-3 text-xs font-medium outline-none transition placeholder:text-muted focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/15"
+        />
+        {{-- Compteur et navigation --}}
+        <div
+          x-show="searchQuery.trim().length > 0"
+          x-cloak
+          class="flex items-center gap-1 flex-none"
+        >
+          <span
+            class="text-xs font-bold px-1.5 py-0.5 rounded-md"
+            :class="searchResults.length > 0 ? 'text-ink bg-paper' : 'text-rose-600 bg-rose-50'"
+            x-text="searchResults.length > 0 ? (currentSearchIndex + 1) + ' / ' + searchResults.length : '0 résultat'"
+          ></span>
+          <button
+            type="button"
+            x-on:click="prevSearchResult()"
+            :disabled="searchResults.length === 0"
+            aria-label="Résultat précédent"
+            title="Précédent"
+            class="grid size-8 place-items-center rounded-lg border border-line bg-white text-ink transition hover:bg-paper disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+          >
+            @svg('lucide:chevron-up', { width: 15, height: 15 })
+          </button>
+          <button
+            type="button"
+            x-on:click="nextSearchResult()"
+            :disabled="searchResults.length === 0"
+            aria-label="Résultat suivant"
+            title="Suivant"
+            class="grid size-8 place-items-center rounded-lg border border-line bg-white text-ink transition hover:bg-paper disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+          >
+            @svg('lucide:chevron-down', { width: 15, height: 15 })
+          </button>
+        </div>
+
+        <button
+          type="button"
+          x-on:click="closeSearch()"
+          aria-label="Fermer la recherche"
+          title="Fermer"
+          class="grid size-8 place-items-center rounded-lg text-muted hover:bg-paper hover:text-ink cursor-pointer flex-none"
+        >
+          @svg('lucide:x', { width: 16, height: 16 })
+        </button>
+      </div>
+      {{-- Messages --}}
+      <div class="relative flex min-h-0 flex-1 flex-col">
+        <div
+          x-ref="list"
+          x-on:scroll.passive="onScroll()"
+          class="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4"
+        >
+          @if(!groups.length)
+            <div data-empty class="my-auto flex flex-col items-center gap-3 text-center">
+              <span
+                class="grid size-16 place-items-center rounded-2xl bg-white text-brand shadow-card"
+              >
+                @svg('lucide:hand-heart', { width: 28, height: 28 })
+              </span>
+              <p class="max-w-xs text-sm text-muted">
+                Aucun message pour l'instant. Dites bonjour à
+                {{ header.title }}
+                !
+              </p>
+            </div>
+          @end
+
+          <div x-ref="messages" class="flex flex-col gap-2">
+            @each(group in groups)
+              <p
+                data-day-label
+                class="mx-auto my-3 w-fit rounded-full bg-white px-3 py-1 text-xs font-semibold text-muted shadow-card"
+              >
+                {{ group.label }}
+              </p>
+              @each(message in group.messages)
+                @!messageBubble({ message: message, conversationId: activeId })
+              @end
+            @end
+            {{-- Bulle d'indication de saisie animée (style WhatsApp) --}}
+            <div
+              x-show="typingUser"
+              x-cloak
+              x-transition
+              class="flex items-center gap-2 self-start rounded-2xl rounded-bl-md bg-white px-3.5 py-2 text-xs font-medium text-muted shadow-card my-1"
+            >
+              <span class="font-bold text-ink" x-text="typingUser"></span>
+              <span>écrit</span>
+              <span class="inline-flex items-center gap-1 py-1">
+                <span
+                  class="size-1.5 rounded-full bg-brand animate-bounce [animation-delay:-0.32s]"
+                ></span>
+                <span
+                  class="size-1.5 rounded-full bg-brand animate-bounce [animation-delay:-0.16s]"
+                ></span>
+                <span class="size-1.5 rounded-full bg-brand animate-bounce"></span>
+              </span>
+            </div>
+          </div>
+        </div>
+        {{-- Nouveaux messages pendant que l'on lit plus haut --}}
+        <button
+          type="button"
+          x-show="unseen > 0"
+          x-cloak
+          x-transition
+          x-on:click="scrollToBottom()"
+          class="absolute bottom-3 left-1/2 inline-flex -translate-x-1/2 cursor-pointer items-center gap-2 rounded-full bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-card"
+        >
+          @svg('lucide:arrow-down', { width: 16, height: 16 })
+          <span x-text="unseen > 1 ? unseen + ' nouveaux messages' : '1 nouveau message'"></span>
+        </button>
+      </div>
+      {{-- Saisie --}}
+      <div class="flex-none border-t border-line bg-white">
+        <p
+          x-show="offline"
+          x-cloak
+          role="status"
+          class="flex items-center gap-2 bg-brand-50 px-4 py-2 text-sm font-medium text-brand"
+        >
+          @svg('lucide:loader-circle', { width: 16, height: 16, class: 'animate-spin' })
+          
+          Connexion perdue, reconnexion en cours…
+
+        </p>
+
+        <p
+          x-show="error"
+          x-cloak
+          x-text="error"
+          role="alert"
+          class="px-4 pt-3 text-sm font-medium text-brand"
+        ></p>
+        {{-- Aperçu des fichiers avant envoi --}}
+        <div
+          x-show="pendingFiles.length > 0"
+          x-cloak
+          class="flex gap-2 overflow-x-auto border-b border-line px-3 py-2 sm:px-4"
+        >
+          <template x-for="(item, index) in pendingFiles" x-bind:key="item.key">
+            <div class="relative flex-none">
+              <template x-if="item.kind === 'image'">
+                <img
+                  x-bind:src="item.preview"
+                  alt=""
+                  class="size-16 rounded-xl object-cover ring-1 ring-line"
+                />
+              </template>
+              <template x-if="item.kind === 'video'">
+                <video
+                  x-bind:src="item.preview"
+                  muted
+                  class="size-16 rounded-xl object-cover ring-1 ring-line"
+                ></video>
+              </template>
+              <template x-if="item.kind === 'file'">
+                <div
+                  class="flex size-16 flex-col items-center justify-center rounded-xl bg-paper px-1 text-center ring-1 ring-line"
+                >
+                  @svg('lucide:file', { width: 20, height: 20, class: 'text-muted' })
+                  <span
+                    class="mt-1 line-clamp-2 text-[10px] font-semibold text-muted"
+                    x-text="item.name"
+                  ></span>
+                </div>
+              </template>
+              <button
+                type="button"
+                x-on:click="removePendingFile(index)"
+                aria-label="Retirer le fichier"
+                class="absolute -right-1 -top-1 grid size-6 place-items-center rounded-full bg-ink text-white shadow"
+              >
+                @svg('lucide:x', { width: 12, height: 12 })
+              </button>
+            </div>
+          </template>
+        </div>
+        @form({
+          route: 'messages.store',
+          routeParams: { conversationId: activeId },
+          method: 'POST',
+          enctype: 'multipart/form-data',
+          class:
+            'flex items-end gap-1.5 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:gap-2 sm:p-4',
+          'x-ref': 'form',
+          'x-on:submit.prevent': 'send($event)',
+        })
+          <input
+            type="file"
+            x-ref="fileInput"
+            x-on:change="onFilesSelected($event)"
+            multiple
+            accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,application/pdf,text/plain,.zip"
+            class="sr-only"
+          />
+
+          <div class="relative flex-none">
+            <button
+              type="button"
+              x-on:click="emojiOpen = !emojiOpen"
+              aria-label="Insérer un emoji"
+              class="grid size-11 place-items-center rounded-full text-muted transition hover:bg-paper hover:text-ink cursor-pointer"
+            >
+              @svg('lucide:smile', { width: 22, height: 22 })
+            </button>
+            <div
+              x-show="emojiOpen"
+              x-cloak
+              x-on:click.outside="emojiOpen = false"
+              x-transition
+              class="absolute bottom-full left-0 z-20 mb-2 grid w-[min(18rem,70vw)] grid-cols-8 gap-1 rounded-2xl border border-line bg-white p-2 shadow-card"
+            >
+              <template x-for="emoji in emojiChoices" x-bind:key="emoji">
+                <button
+                  type="button"
+                  x-on:click="insertEmoji(emoji)"
+                  class="grid size-9 place-items-center rounded-lg text-xl transition hover:bg-paper cursor-pointer"
+                  x-text="emoji"
+                ></button>
+              </template>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            x-on:click="$refs.fileInput.click()"
+            aria-label="Joindre un fichier ou une photo"
+            class="grid size-11 flex-none place-items-center rounded-full text-muted transition hover:bg-paper hover:text-ink cursor-pointer"
+          >
+            @svg('lucide:paperclip', { width: 22, height: 22 })
+          </button>
+
+          <label for="message-body" class="sr-only">Votre message</label>
+          <textarea
+            id="message-body"
+            name="body"
+            rows="1"
+            maxlength="2000"
+            enterkeyhint="send"
+            placeholder="Écrire un message…"
+            x-ref="field"
+            x-model="draft"
+            x-on:input="onInput()"
+            x-on:keydown="onKeydown($event)"
+            class="max-h-36 min-h-12 min-w-0 flex-1 resize-none rounded-3xl border border-line bg-paper px-4 py-3 text-[15px] leading-6 outline-none transition placeholder:text-[#8d8d8d] focus:border-brand focus:bg-white focus:ring-4 focus:ring-brand/15"
+          ></textarea>
+
+          <button
+            type="submit"
+            x-bind:disabled="!canSend"
+            aria-label="Envoyer"
+            class="grid size-12 flex-none cursor-pointer place-items-center rounded-full bg-brand text-white shadow-brand transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
+          >
+            <span x-show="!sending" class="grid place-items-center">
+              @svg('lucide:send-horizontal', { width: 20, height: 20 })
+            </span>
+            <span x-show="sending" x-cloak class="grid place-items-center">
+              @svg('lucide:loader-circle', {
+                width: 20,
+                height: 20,
+                class: 'animate-spin',
+              })
+            </span>
+          </button>
+        @end
+      </div>
+    </section>
+  </div>
+@end
+
+===== resources/views/components/conversation_card.edge =====
+@let(cardId = $props.get('id'))
+@let(cardTitle = $props.get('title'))
+@let(cardAvatarUrl = $props.get('avatarUrl'))
+@let(isActive = $props.get('active', false))
+@let(isGroup = $props.get('isGroup', false))
+@let(unreadCount = Number($props.get('unreadCount', 0)))
+{{-- La carte entière ouvre la discussion (lien étiré), sauf la photo, qui s'agrandit. --}}
+<li
+  data-conversation-id="{{ cardId }}"
+  data-title="{{ cardTitle }}"
+  data-is-group="{{ isGroup ? '1' : '0' }}"
+  data-unread-count="{{ unreadCount }}"
+  class="relative flex items-center gap-3 px-4 py-3 transition {{ isActive ? 'bg-brand-50' : 'hover:bg-paper' }}"
+>
+  <div class="relative z-10 flex-none">
+    @if(cardAvatarUrl)
+      @!avatar({ src: cardAvatarUrl, name: cardTitle, size: 52 })
+    @else
+      @!avatar({ initials: $props.get('initials'), size: 52 })
+    @end
+  </div>
+
+  <a
+    href="{{ urlFor('conversations.show', { id: cardId }) }}"
+    aria-current="{{ isActive ? 'page' : 'false' }}"
+    class="flex min-w-0 flex-1 flex-col gap-0.5 after:absolute after:inset-0"
+  >
+    <span class="flex items-baseline justify-between gap-3">
+      <span class="flex min-w-0 items-center gap-1.5">
+        @if(isGroup)
+          <span class="text-muted flex-none" title="Groupe">
+            @svg('lucide:users', { width: 14, height: 14 })
+          </span>
+        @end
+
+        <span
+          class="truncate text-[15px] {{ unreadCount > 0 ? 'font-extrabold text-ink' : 'font-bold text-ink' }}"
+        >
+          {{ cardTitle }}
+        </span>
+      </span>
+      <span class="flex-none text-xs {{ unreadCount > 0 ? 'font-bold text-brand' : 'text-muted' }}">
+        {{ $props.get('time') }}
+      </span>
+    </span>
+    <span class="flex items-center justify-between gap-2">
+      <span
+        class="truncate text-sm {{ unreadCount > 0 ? 'font-semibold text-ink' : 'text-muted' }}"
+      >
+        {{ $props.get('preview') }}
+      </span>
+      @if(unreadCount > 0)
+        <span
+          data-badge
+          class="flex h-5 min-w-5 flex-none items-center justify-center rounded-full bg-brand px-1.5 text-[11px] font-bold text-white shadow-brand ring-2 ring-white animate-in zoom-in-50 duration-200"
+        >
+          {{ unreadCount > 99 ? '99+' : unreadCount }}
+        </span>
+      @end
+    </span>
+  </a>
+</li>

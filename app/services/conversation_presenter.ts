@@ -1,11 +1,12 @@
-import { DateTime } from 'luxon'
 import type Conversation from '#models/conversation'
+import type ConversationMember from '#models/conversation_member'
 import type Message from '#models/message'
 import type User from '#models/user'
 import AvatarService from '#services/avatar_service'
 import type { ConversationWithLastMessage } from '#services/conversation_service'
 import { dayKey, formatDayLabel, formatListDate, formatMessageTime } from '#services/date_formatter'
 import { isWithinEditWindow } from '#services/message_rules'
+import { isUserOnline } from '#services/presence'
 
 export type ConversationCard = {
   id: number
@@ -38,6 +39,14 @@ export type MessageAttachmentView = {
   sizeLabel: string
 }
 
+/**
+ * Statut d'un message que l'on a envoyé :
+ * - sent : envoyé, pas encore reçu (le destinataire est hors ligne) → un trait ;
+ * - delivered : reçu (le destinataire est connecté) → deux traits gris ;
+ * - read : lu (le destinataire a ouvert la conversation) → deux traits bleus.
+ */
+export type MessageStatus = 'sent' | 'delivered' | 'read'
+
 export type MessageBubble = {
   id: number
   body: string
@@ -50,6 +59,7 @@ export type MessageBubble = {
   authorName: string | null
   authorColor: number
   attachments: MessageAttachmentView[]
+  status: MessageStatus | null
 }
 
 export type MessageGroup = {
@@ -110,9 +120,7 @@ export default class ConversationPresenter {
       : null
 
     const otherUser = otherMember?.user
-    const isOnline = Boolean(
-      otherUser?.lastSeenAt && DateTime.now().diff(otherUser.lastSeenAt, 'minutes').minutes < 2
-    )
+    const isOnline = otherUser ? isUserOnline(otherUser) : false
 
     return {
       ...(await this.identity(conversation, viewer)),
@@ -154,8 +162,17 @@ export default class ConversationPresenter {
    * fait que cacher les boutons non permis. Dans un groupe, la bulle des
    * autres affiche le nom de son auteur (le message doit avoir son auteur
    * chargé).
+   *
+   * `members` sont les membres de la conversation (avec leurs pointeurs de
+   * réception et de lecture) : ils servent à calculer les traits des messages
+   * de l'utilisateur.
    */
-  bubble(message: Message, viewer: User, showAuthor: boolean): MessageBubble {
+  bubble(
+    message: Message,
+    viewer: User,
+    showAuthor: boolean,
+    members: ConversationMember[] = []
+  ): MessageBubble {
     const isDeleted = Boolean(message.deletedAt)
     const isMine = message.senderId === viewer.id
 
@@ -175,6 +192,7 @@ export default class ConversationPresenter {
       authorName: showAuthor && !isMine ? (message.sender?.fullName ?? 'Membre') : null,
       authorColor: message.senderId % 6,
       attachments: isDeleted ? [] : this.attachmentsOf(message),
+      status: isMine && !isDeleted ? this.statusOf(message, members) : null,
     }
   }
 
@@ -182,9 +200,15 @@ export default class ConversationPresenter {
    * Données du morceau de HTML renvoyé après une action sur un message : la
    * bulle et, si c'est le premier message du jour, l'intitulé du jour.
    */
-  fragment(message: Message, viewer: User, startsNewDay: boolean, showAuthor: boolean) {
+  fragment(
+    message: Message,
+    viewer: User,
+    startsNewDay: boolean,
+    showAuthor: boolean,
+    members: ConversationMember[] = []
+  ) {
     return {
-      message: this.bubble(message, viewer, showAuthor),
+      message: this.bubble(message, viewer, showAuthor, members),
       dayLabel: startsNewDay ? formatDayLabel(message.createdAt) : null,
     }
   }
@@ -192,7 +216,12 @@ export default class ConversationPresenter {
   /**
    * Messages regroupés par jour, avec un intitulé pour chaque jour.
    */
-  groupMessages(messages: Message[], viewer: User, showAuthor: boolean): MessageGroup[] {
+  groupMessages(
+    messages: Message[],
+    viewer: User,
+    showAuthor: boolean,
+    members: ConversationMember[] = []
+  ): MessageGroup[] {
     const groups: MessageGroup[] = []
     let currentDay = ''
 
@@ -204,10 +233,34 @@ export default class ConversationPresenter {
         currentDay = day
       }
 
-      groups[groups.length - 1].messages.push(this.bubble(message, viewer, showAuthor))
+      groups[groups.length - 1].messages.push(this.bubble(message, viewer, showAuthor, members))
     }
 
     return groups
+  }
+
+  /**
+   * Statut d'un message envoyé par l'utilisateur. Dans un groupe, il faut que
+   * tous les autres membres l'aient reçu (ou lu) pour que le statut avance.
+   */
+  private statusOf(message: Message, members: ConversationMember[]): MessageStatus {
+    const recipients = members.filter((member) => member.userId !== message.senderId)
+    if (recipients.length === 0) {
+      return 'sent'
+    }
+
+    if (recipients.every((member) => (member.lastReadMessageId ?? 0) >= message.id)) {
+      return 'read'
+    }
+    if (
+      recipients.every(
+        (member) =>
+          Math.max(member.lastDeliveredMessageId ?? 0, member.lastReadMessageId ?? 0) >= message.id
+      )
+    ) {
+      return 'delivered'
+    }
+    return 'sent'
   }
 
   /**

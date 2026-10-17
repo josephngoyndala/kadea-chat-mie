@@ -1,3 +1,4 @@
+import type User from '#models/user'
 import ConversationPresenter from '#services/conversation_presenter'
 import ConversationService from '#services/conversation_service'
 import RealtimeService from '#services/realtime_service'
@@ -19,6 +20,8 @@ export default class ConversationsController {
   async index({ auth, view }: HttpContext) {
     const user = auth.getUserOrFail()
 
+    await this.deliverPending(user)
+
     const items = await this.conversations.listFor(user)
 
     return view.render('pages/conversations/index', {
@@ -35,7 +38,15 @@ export default class ConversationsController {
     const conversationId = Number(params.id)
 
     const conversation = await this.conversations.findForMember(user, conversationId)
-    await this.conversations.markAsRead(conversation.id, user.id)
+
+    /**
+     * Ouvrir la conversation : ses messages sont lus (traits bleus chez
+     * leurs auteurs). Les messages en attente dans les autres conversations
+     * sont, eux, marqués comme reçus.
+     */
+    const readIds = await this.conversations.markAsRead(conversation.id, user.id)
+    this.realtime.statusChanged(conversation.id, readIds)
+    await this.deliverPending(user)
 
     const [items, messages] = await Promise.all([
       this.conversations.listFor(user),
@@ -49,7 +60,8 @@ export default class ConversationsController {
       groups: this.presenter.groupMessages(
         messages,
         user,
-        this.presenter.showsAuthors(conversation)
+        this.presenter.showsAuthors(conversation),
+        conversation.members
       ),
     })
   }
@@ -58,6 +70,10 @@ export default class ConversationsController {
    * Renvoie la carte d'une conversation (morceau de HTML) pour rafraîchir la
    * liste en temps réel. Si l'utilisateur n'est plus membre, la réponse est
    * « introuvable » et sa liste retire la carte.
+   *
+   * Si cette requête arrive, c'est que le navigateur du membre est connecté :
+   * les nouveaux messages lui sont donc bien arrivés (« reçus »), et « lus »
+   * s'il regarde justement cette conversation.
    */
   async card({ auth, params, request, view }: HttpContext) {
     const user = auth.getUserOrFail()
@@ -66,9 +82,10 @@ export default class ConversationsController {
     const conversation = await this.conversations.findForMember(user, conversationId)
     const isActive = conversation.id === Number(request.input('active'))
 
-    if (isActive) {
-      await this.conversations.markAsRead(conversation.id, user.id)
-    }
+    const changedIds = isActive
+      ? await this.conversations.markAsRead(conversation.id, user.id)
+      : await this.conversations.markAsDelivered(conversation.id, user.id)
+    this.realtime.statusChanged(conversation.id, changedIds)
 
     const lastMessage = await this.conversations.lastMessageOf(conversation, user)
     const unreadMap = await this.conversations.unreadCountsFor([conversation.id], user)
@@ -90,7 +107,8 @@ export default class ConversationsController {
     const conversationId = Number(params.id)
 
     const conversation = await this.conversations.findForMember(user, conversationId)
-    await this.conversations.markAsRead(conversation.id, user.id)
+    const readIds = await this.conversations.markAsRead(conversation.id, user.id)
+    this.realtime.statusChanged(conversation.id, readIds)
 
     return response.noContent()
   }
@@ -166,5 +184,17 @@ export default class ConversationsController {
 
     session.flash('success', 'La discussion a été supprimée de votre liste.')
     return response.redirect().toRoute('dashboard')
+  }
+
+  /**
+   * L'utilisateur est connecté : les messages qui l'attendaient dans toutes
+   * ses conversations passent à « reçus », et leurs auteurs en sont prévenus.
+   */
+  private async deliverPending(user: User) {
+    const changes = await this.conversations.markAllAsDelivered(user.id)
+
+    for (const [conversationId, messageIds] of changes) {
+      this.realtime.statusChanged(conversationId, messageIds)
+    }
   }
 }
