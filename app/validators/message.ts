@@ -1,21 +1,12 @@
 import vine from '@vinejs/vine'
 import { frenchMessages } from '#validators/shared/french_messages'
-import MessageAttachmentService from '#services/message_attachment_service'
 
 /**
- * Validateur de l'envoi d'un message : texte et/ou pièces jointes.
+ * Validateur du texte d'un message. Les pièces jointes sont validées à part
+ * pour éviter qu'un champ fichier vide du formulaire ne bloque l'envoi.
  */
 export const sendMessageValidator = vine.create({
   body: vine.string().trim().maxLength(2000).optional(),
-  attachments: vine
-    .array(
-      vine.file({
-        size: '10mb',
-        extnames: MessageAttachmentService.allowedExtnames(),
-      })
-    )
-    .maxLength(5)
-    .optional(),
 })
 
 /**

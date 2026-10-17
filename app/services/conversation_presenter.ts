@@ -34,6 +34,7 @@ export type MessageAttachmentView = {
   storagePath: string
   mimeType: string
   isImage: boolean
+  isVideo: boolean
   sizeLabel: string
 }
 
@@ -249,8 +250,15 @@ export default class ConversationPresenter {
 
     let text = (message.body ?? '').replace(/\s+/g, ' ').trim()
     if (!text && message.attachments && message.attachments.length > 0) {
+      const hasVideo = message.attachments.some((file) => file.mimeType.startsWith('video/'))
       const hasImage = message.attachments.some((file) => file.mimeType.startsWith('image/'))
-      text = hasImage ? '📷 Photo' : '📎 Fichier'
+      if (hasVideo) {
+        text = '🎬 Vidéo'
+      } else if (hasImage) {
+        text = '📷 Photo'
+      } else {
+        text = '📎 Fichier'
+      }
     }
 
     const clipped = text.length > 80 ? `${text.slice(0, 80)}…` : text
@@ -276,6 +284,7 @@ export default class ConversationPresenter {
       storagePath: file.storagePath,
       mimeType: file.mimeType,
       isImage: file.mimeType.startsWith('image/'),
+      isVideo: file.mimeType.startsWith('video/'),
       sizeLabel: this.formatFileSize(file.sizeBytes),
     }))
   }

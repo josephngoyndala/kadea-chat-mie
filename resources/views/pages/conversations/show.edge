@@ -329,14 +329,21 @@
         >
           <template x-for="(item, index) in pendingFiles" x-bind:key="item.key">
             <div class="relative flex-none">
-              <template x-if="item.preview">
+              <template x-if="item.kind === 'image'">
                 <img
                   x-bind:src="item.preview"
                   alt=""
                   class="size-16 rounded-xl object-cover ring-1 ring-line"
                 />
               </template>
-              <template x-if="!item.preview">
+              <template x-if="item.kind === 'video'">
+                <video
+                  x-bind:src="item.preview"
+                  muted
+                  class="size-16 rounded-xl object-cover ring-1 ring-line"
+                ></video>
+              </template>
+              <template x-if="item.kind === 'file'">
                 <div
                   class="flex size-16 flex-col items-center justify-center rounded-xl bg-paper px-1 text-center ring-1 ring-line"
                 >
@@ -370,11 +377,10 @@
         })
           <input
             type="file"
-            name="attachments[]"
             x-ref="fileInput"
             x-on:change="onFilesSelected($event)"
             multiple
-            accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,.zip"
+            accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,application/pdf,text/plain,.zip"
             class="sr-only"
           />
 

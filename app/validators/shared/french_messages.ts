@@ -17,7 +17,7 @@ export function frenchMessages() {
       'minLength': 'Le champ {{ field }} doit contenir au moins {{ min }} caractères.',
       'maxLength': 'Le champ {{ field }} ne doit pas dépasser {{ max }} caractères.',
       'accepted': 'Vous devez accepter les {{ field }}.',
-      'file': 'Sélectionnez une image valide.',
+      'file': 'Fichier invalide.',
       'file.size': 'Le fichier est trop lourd.',
       'file.extname': 'Ce type de fichier n’est pas accepté.',
       'attachments.maxLength': 'Vous ne pouvez pas envoyer plus de {{ max }} fichiers à la fois.',
