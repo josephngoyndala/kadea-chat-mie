@@ -17,5 +17,16 @@ export const addMemberValidator = vine.create({
   userId: vine.number().positive(),
 })
 
+/**
+ * Validateur de la photo d'un groupe : JPG, PNG ou WEBP, 2 Mo maximum.
+ */
+export const updateGroupAvatarValidator = vine.create({
+  avatar: vine.file({
+    size: '2mb',
+    extnames: ['jpg', 'jpeg', 'png', 'webp'],
+  }),
+})
+
 createGroupValidator.messagesProvider = frenchMessages()
 addMemberValidator.messagesProvider = frenchMessages()
+updateGroupAvatarValidator.messagesProvider = frenchMessages()

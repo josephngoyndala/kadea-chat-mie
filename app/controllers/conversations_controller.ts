@@ -153,4 +153,21 @@ export default class ConversationsController {
 
     return response.redirect().toRoute('conversations.show', { id: conversation.id })
   }
+
+  /**
+   * Quitte une conversation : elle disparaît de la liste de l'utilisateur.
+   */
+  async destroy({ auth, params, response, session }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conversationId = Number(params.id)
+
+    const conversation = await this.conversations.leave(user, conversationId)
+    this.realtime.membersChanged(
+      conversation,
+      conversation.members.map((member) => member.userId)
+    )
+
+    session.flash('success', 'La discussion a été supprimée de votre liste.')
+    return response.redirect().toRoute('dashboard')
+  }
 }

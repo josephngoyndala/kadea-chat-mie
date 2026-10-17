@@ -31,7 +31,45 @@
           Ce message a été supprimé
         </p>
       @else
-        <p data-message-body class="whitespace-pre-wrap text-[15px] leading-relaxed [overflow-wrap:anywhere]">{{ message.body }}</p>
+        @if(message.body)
+          <p data-message-body class="whitespace-pre-wrap text-[15px] leading-relaxed [overflow-wrap:anywhere]">{{ message.body }}</p>
+        @end
+
+        @if(message.attachments?.length)
+          <div class="{{ message.body ? 'mt-2' : '' }} flex flex-col gap-2">
+            @each(file in message.attachments)
+              @let(fileUrl = await driveUrl(file.storagePath))
+              @if(file.isImage)
+                <button
+                  type="button"
+                  data-zoom-src="{{ fileUrl }}"
+                  data-zoom-alt="{{ file.originalName }}"
+                  class="block max-w-full overflow-hidden rounded-xl {{ message.isMine ? 'ring-1 ring-white/30' : 'ring-1 ring-line' }}"
+                >
+                  <img
+                    src="{{ fileUrl }}"
+                    alt="{{ file.originalName }}"
+                    class="max-h-64 w-full object-cover"
+                    loading="lazy"
+                  />
+                </button>
+              @else
+                <a
+                  href="{{ fileUrl }}"
+                  download="{{ file.originalName }}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  x-on:click.stop
+                  class="flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm {{ message.isMine ? 'border-white/30 bg-white/10 hover:bg-white/15' : 'border-line bg-paper hover:bg-white' }}"
+                >
+                  @svg('lucide:paperclip', { width: 16, height: 16 })
+                  <span class="min-w-0 flex-1 truncate font-semibold">{{ file.originalName }}</span>
+                  <span class="text-xs opacity-80">{{ file.sizeLabel }}</span>
+                </a>
+              @end
+            @end
+          </div>
+        @end
       @end
       <p class="mt-1 text-right text-[11px] {{ message.isDeleted ? 'text-muted' : (message.isMine ? 'text-white/70' : 'text-muted') }}">{{ message.isEdited ? 'modifié · ' : '' }}{{ message.time }}</p>
     </div>

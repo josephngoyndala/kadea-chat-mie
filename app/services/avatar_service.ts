@@ -1,6 +1,7 @@
 import string from '@adonisjs/core/helpers/string'
 import drive from '@adonisjs/drive/services/main'
 import type { MultipartFile } from '@adonisjs/core/bodyparser'
+import type Conversation from '#models/conversation'
 import type User from '#models/user'
 
 /**
@@ -41,6 +42,34 @@ export default class AvatarService {
 
     user.avatarPath = null
     await user.save()
+
+    await this.deleteQuietly(previousKey)
+  }
+
+  /**
+   * Photo d'un groupe : même logique que le profil utilisateur.
+   */
+  async replaceForConversation(conversation: Conversation, file: MultipartFile) {
+    const previousKey = conversation.avatarPath
+    const key = `group-avatars/${conversation.id}-${string.uuid()}.${file.extname ?? 'jpg'}`
+    await file.moveToDisk(key)
+
+    conversation.avatarPath = key
+    await conversation.save()
+
+    if (previousKey) {
+      await this.deleteQuietly(previousKey)
+    }
+  }
+
+  async removeForConversation(conversation: Conversation) {
+    const previousKey = conversation.avatarPath
+    if (!previousKey) {
+      return
+    }
+
+    conversation.avatarPath = null
+    await conversation.save()
 
     await this.deleteQuietly(previousKey)
   }

@@ -28,6 +28,15 @@ export type ConversationHeader = {
   isOnline: boolean
 }
 
+export type MessageAttachmentView = {
+  id: number
+  originalName: string
+  storagePath: string
+  mimeType: string
+  isImage: boolean
+  sizeLabel: string
+}
+
 export type MessageBubble = {
   id: number
   body: string
@@ -39,6 +48,7 @@ export type MessageBubble = {
   time: string
   authorName: string | null
   authorColor: number
+  attachments: MessageAttachmentView[]
 }
 
 export type MessageGroup = {
@@ -155,11 +165,16 @@ export default class ConversationPresenter {
       isMine,
       isDeleted,
       isEdited: Boolean(message.editedAt) && !isDeleted,
-      canEdit: isMine && !isDeleted && isWithinEditWindow(message.createdAt),
+      canEdit:
+        isMine &&
+        !isDeleted &&
+        Boolean(message.body?.trim()) &&
+        isWithinEditWindow(message.createdAt),
       canDeleteForEveryone: isMine && !isDeleted,
       time: formatMessageTime(message.createdAt),
       authorName: showAuthor && !isMine ? (message.sender?.fullName ?? 'Membre') : null,
       authorColor: message.senderId % 6,
+      attachments: isDeleted ? [] : this.attachmentsOf(message),
     }
   }
 
@@ -233,7 +248,12 @@ export default class ConversationPresenter {
       return 'Message supprimé'
     }
 
-    const text = (message.body ?? '').replace(/\s+/g, ' ').trim()
+    let text = (message.body ?? '').replace(/\s+/g, ' ').trim()
+    if (!text && message.attachments && message.attachments.length > 0) {
+      const hasImage = message.attachments.some((file) => file.mimeType.startsWith('image/'))
+      text = hasImage ? '📷 Photo' : '📎 Fichier'
+    }
+
     const clipped = text.length > 80 ? `${text.slice(0, 80)}…` : text
 
     if (message.senderId === viewer.id) {
@@ -244,6 +264,31 @@ export default class ConversationPresenter {
       return `${firstName} : ${clipped}`
     }
     return clipped
+  }
+
+  private attachmentsOf(message: Message): MessageAttachmentView[] {
+    if (!message.attachments?.length) {
+      return []
+    }
+
+    return message.attachments.map((file) => ({
+      id: file.id,
+      originalName: file.originalName,
+      storagePath: file.storagePath,
+      mimeType: file.mimeType,
+      isImage: file.mimeType.startsWith('image/'),
+      sizeLabel: this.formatFileSize(file.sizeBytes),
+    }))
+  }
+
+  private formatFileSize(bytes: number) {
+    if (bytes < 1024) {
+      return `${bytes} o`
+    }
+    if (bytes < 1024 * 1024) {
+      return `${Math.round(bytes / 1024)} Ko`
+    }
+    return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`
   }
 
   private initialsOf(name: string) {

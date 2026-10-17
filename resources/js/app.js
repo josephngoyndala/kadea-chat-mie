@@ -71,11 +71,14 @@ document.addEventListener('click', (event) => {
  * Appel au serveur utilisé par la messagerie : le serveur répond par le
  * morceau de HTML à insérer dans la page.
  */
-function postToServer(form) {
+function postToServer(form, bodyOverride) {
+  const headers = { 'X-Chat-Fetch': '1', Accept: 'application/json' }
+  const body = bodyOverride ?? new URLSearchParams(new FormData(form))
+
   return fetch(form.action, {
     method: 'POST',
-    headers: { 'X-Chat-Fetch': '1', Accept: 'application/json' },
-    body: new URLSearchParams(new FormData(form)),
+    headers,
+    body,
   })
 }
 
@@ -173,6 +176,26 @@ Alpine.data('conversationChat', function () {
     searchResults: [],
     currentSearchIndex: -1,
     originalMessageContents: new Map(),
+    emojiOpen: false,
+    emojiChoices: [
+      '😀',
+      '😂',
+      '😍',
+      '🥰',
+      '😊',
+      '😢',
+      '😡',
+      '👍',
+      '👏',
+      '🙏',
+      '🔥',
+      '❤️',
+      '💯',
+      '🎉',
+      '✅',
+      '🚀',
+    ],
+    pendingFiles: [],
 
     init() {
       this.conversationId = this.$el.dataset.conversationId
@@ -188,7 +211,7 @@ Alpine.data('conversationChat', function () {
     },
 
     get canSend() {
-      return this.draft.trim().length > 0 && !this.sending
+      return (this.draft.trim().length > 0 || this.pendingFiles.length > 0) && !this.sending
     },
 
     /**
@@ -400,6 +423,60 @@ Alpine.data('conversationChat', function () {
         this.lastTypingSent = now
         this.sendTypingSignal()
       }
+    },
+
+    insertEmoji(emoji) {
+      this.draft += emoji
+      this.emojiOpen = false
+      this.$nextTick(() => {
+        this.onInput()
+        this.$refs.field?.focus()
+      })
+    },
+
+    onFilesSelected(event) {
+      const picked = [...(event.target.files ?? [])]
+      event.target.value = ''
+
+      for (const file of picked) {
+        if (this.pendingFiles.length >= 5) {
+          this.error = 'Vous ne pouvez pas envoyer plus de 5 fichiers à la fois.'
+          break
+        }
+
+        const key = `${file.name}-${file.size}-${file.lastModified}`
+        const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : null
+        this.pendingFiles.push({ key, file, name: file.name, preview })
+      }
+    },
+
+    removePendingFile(index) {
+      const item = this.pendingFiles[index]
+      if (item?.preview) {
+        URL.revokeObjectURL(item.preview)
+      }
+      this.pendingFiles.splice(index, 1)
+    },
+
+    clearPendingFiles() {
+      for (const item of this.pendingFiles) {
+        if (item.preview) {
+          URL.revokeObjectURL(item.preview)
+        }
+      }
+      this.pendingFiles = []
+    },
+
+    buildSendFormData(form) {
+      const formData = new FormData(form)
+      formData.set('body', this.draft.trim())
+      formData.delete('attachments[]')
+
+      for (const item of this.pendingFiles) {
+        formData.append('attachments[]', item.file, item.file.name)
+      }
+
+      return formData
     },
 
     sendTypingSignal() {
@@ -618,11 +695,15 @@ Alpine.data('conversationChat', function () {
       if (this.typingTimer) clearTimeout(this.typingTimer)
 
       try {
-        const response = await postToServer(event.target)
+        const form = event.target
+        const payload =
+          this.pendingFiles.length > 0 ? this.buildSendFormData(form) : new URLSearchParams(new FormData(form))
+        const response = await postToServer(form, payload)
 
         if (response.status === 201) {
           this.insertHtml(await response.text())
           this.draft = ''
+          this.clearPendingFiles()
           this.$nextTick(() => {
             this.autosize()
             this.scrollToBottom()

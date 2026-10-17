@@ -109,6 +109,7 @@ export default class ConversationService {
       .where('conversation_id', conversation.id)
       .whereRaw(NOT_HIDDEN_FOR_USER, [viewer.id])
       .preload('sender')
+      .preload('attachments')
       .orderBy('id', 'desc')
       .limit(HISTORY_LIMIT)
 
@@ -163,6 +164,7 @@ export default class ConversationService {
 
     const existing = await Conversation.findBy('private_key', privateKey)
     if (existing) {
+      await this.ensureMembers(existing, [user.id, other.id])
       return existing
     }
 
@@ -190,9 +192,49 @@ export default class ConversationService {
        */
       const concurrent = await Conversation.findBy('private_key', privateKey)
       if (concurrent) {
+        await this.ensureMembers(concurrent, [user.id, other.id])
         return concurrent
       }
       throw error
+    }
+  }
+
+  /**
+   * Quitte une conversation : la discussion disparaît de la liste de
+   * l'utilisateur. Pour un groupe, un autre administrateur est promu si besoin.
+   */
+  async leave(user: User, conversationId: number) {
+    const conversation = await this.findForMember(user, conversationId)
+
+    await db.transaction(async (trx) => {
+      const membership = await ConversationMember.query({ client: trx })
+        .where('conversation_id', conversation.id)
+        .where('user_id', user.id)
+        .firstOrFail()
+
+      await membership.useTransaction(trx).delete()
+
+      if (conversation.type === 'group') {
+        const remaining = await ConversationMember.query({ client: trx })
+          .where('conversation_id', conversation.id)
+          .orderBy('joined_at', 'asc')
+
+        if (remaining.length > 0 && !remaining.some((member) => member.role === 'admin')) {
+          remaining[0].role = 'admin'
+          await remaining[0].useTransaction(trx).save()
+        }
+      }
+    })
+
+    return conversation
+  }
+
+  private async ensureMembers(conversation: Conversation, userIds: number[]) {
+    for (const userId of userIds) {
+      await ConversationMember.firstOrCreate(
+        { conversationId: conversation.id, userId },
+        { role: 'member' }
+      )
     }
   }
 
@@ -213,7 +255,10 @@ export default class ConversationService {
       .groupBy('conversation_id')
       .max('id')
 
-    const messages = await Message.query().whereIn('id', latestIds).preload('sender')
+    const messages = await Message.query()
+      .whereIn('id', latestIds)
+      .preload('sender')
+      .preload('attachments')
     for (const message of messages) {
       lastMessages.set(message.conversationId, message)
     }

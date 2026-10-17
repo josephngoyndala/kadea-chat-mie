@@ -25,6 +25,7 @@ export type ScannedRoutes = {
     'dashboard': { paramsTuple?: []; params?: {} }
     'conversations.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'conversations.card': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'conversations.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'conversations.read': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'conversations.typing': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'conversations.search': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -34,6 +35,8 @@ export type ScannedRoutes = {
     'group_members.index': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
     'group_members.store': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
     'group_members.destroy': { paramsTuple: [ParamValue,ParamValue]; params: {'conversationId': ParamValue,'userId': ParamValue} }
+    'group_members.update_avatar': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
+    'group_members.destroy_avatar': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
     'messages.index': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
     'messages.show': { paramsTuple: [ParamValue,ParamValue]; params: {'conversationId': ParamValue,'messageId': ParamValue} }
     'messages.store': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
@@ -98,12 +101,15 @@ export type ScannedRoutes = {
     'password_reset.update': { paramsTuple: [ParamValue]; params: {'token': ParamValue} }
     'session.destroy': { paramsTuple?: []; params?: {} }
     'session.ping': { paramsTuple?: []; params?: {} }
+    'conversations.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'conversations.read': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'conversations.typing': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'conversations.store': { paramsTuple?: []; params?: {} }
     'groups.store': { paramsTuple?: []; params?: {} }
     'group_members.store': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
     'group_members.destroy': { paramsTuple: [ParamValue,ParamValue]; params: {'conversationId': ParamValue,'userId': ParamValue} }
+    'group_members.update_avatar': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
+    'group_members.destroy_avatar': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
     'messages.store': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
     'messages.update': { paramsTuple: [ParamValue,ParamValue]; params: {'conversationId': ParamValue,'messageId': ParamValue} }
     'messages.destroy': { paramsTuple: [ParamValue,ParamValue]; params: {'conversationId': ParamValue,'messageId': ParamValue} }
