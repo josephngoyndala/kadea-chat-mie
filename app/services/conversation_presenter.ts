@@ -1,3 +1,4 @@
+import { DateTime } from 'luxon'
 import type Conversation from '#models/conversation'
 import type Message from '#models/message'
 import type User from '#models/user'
@@ -13,6 +14,8 @@ export type ConversationCard = {
   avatarUrl: string | null
   preview: string
   time: string
+  isGroup: boolean
+  unreadCount: number
 }
 
 export type ConversationHeader = {
@@ -21,6 +24,8 @@ export type ConversationHeader = {
   avatarUrl: string | null
   isGroup: boolean
   memberCount: number
+  otherUserId: number | null
+  isOnline: boolean
 }
 
 export type MessageBubble = {
@@ -69,7 +74,7 @@ export default class ConversationPresenter {
    */
   async cards(items: ConversationWithLastMessage[], viewer: User): Promise<ConversationCard[]> {
     return Promise.all(
-      items.map(async ({ conversation, lastMessage }) => {
+      items.map(async ({ conversation, lastMessage, unreadCount }) => {
         const identity = await this.identity(conversation, viewer)
 
         return {
@@ -77,6 +82,8 @@ export default class ConversationPresenter {
           ...identity,
           preview: this.previewOf(lastMessage, viewer, this.showsAuthors(conversation)),
           time: lastMessage ? formatListDate(lastMessage.createdAt) : '',
+          isGroup: conversation.type === 'group',
+          unreadCount: unreadCount ?? 0,
         }
       })
     )
@@ -86,10 +93,23 @@ export default class ConversationPresenter {
    * En-tête d'une conversation ouverte.
    */
   async header(conversation: Conversation, viewer: User): Promise<ConversationHeader> {
+    const isGroup = conversation.type === 'group'
+    const otherMember = !isGroup
+      ? conversation.members.find((member) => member.userId !== viewer.id)
+      : null
+
+    const otherUser = otherMember?.user
+    const isOnline = Boolean(
+      otherUser?.lastSeenAt &&
+        DateTime.now().diff(otherUser.lastSeenAt, 'minutes').minutes < 2
+    )
+
     return {
       ...(await this.identity(conversation, viewer)),
-      isGroup: conversation.type === 'group',
+      isGroup,
       memberCount: conversation.members.length,
+      otherUserId: otherUser?.id ?? null,
+      isOnline,
     }
   }
 

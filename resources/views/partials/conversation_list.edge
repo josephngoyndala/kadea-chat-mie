@@ -1,23 +1,118 @@
 <div
-  class="flex min-h-0 flex-1 flex-col bg-white"
+  class="relative flex min-h-0 flex-1 flex-col bg-white w-full min-w-0 max-w-full overflow-hidden"
   x-data="conversationList"
   data-user-id="{{ auth?.user?.id }}"
   data-active-id="{{ activeId ?? '' }}"
   data-card-url="{{ urlFor('conversations.card', { id: '0' }) }}"
   data-dashboard-url="{{ urlFor('dashboard') }}"
+  x-effect="applyFilter()"
 >
-  <div class="flex flex-none items-center justify-between gap-3 px-4 pb-3 pt-4 sm:pt-5">
-    <h1 class="text-2xl font-extrabold tracking-tight">Discussions</h1>
-    <div class="flex items-center gap-2">
-      @button({ route: 'groups.create', variant: 'secondary', size: 'sm' })
-        @svg('lucide:users-round', { width: 16, height: 16 })
-        Groupe
-      @end
-      @button({ route: 'users.index', size: 'sm' })
-        @svg('lucide:square-pen', { width: 16, height: 16 })
-        Nouvelle
-      @end
+  {{-- En-tête de la liste : titre + actions compactes inspirées du modèle WhatsApp --}}
+  <div class="flex flex-none items-center justify-between gap-2 px-4 pb-3 pt-4 sm:pt-5">
+    <div class="flex items-center gap-2 min-w-0">
+      <h1 class="text-2xl font-extrabold tracking-tight text-ink truncate">Discussions</h1>
     </div>
+
+    <div class="flex items-center gap-1.5 flex-none">
+      {{-- Bouton Créer un groupe --}}
+      <a
+        href="{{ urlFor('groups.create') }}"
+        title="Créer un groupe"
+        aria-label="Créer un groupe"
+        class="inline-flex h-9 items-center gap-1.5 rounded-xl border border-line bg-white px-2.5 text-xs font-semibold text-ink transition hover:bg-paper active:scale-95"
+      >
+        @svg('lucide:users-round', { width: 15, height: 15 })
+        <span class="hidden sm:inline">Groupe</span>
+      </a>
+
+      {{-- Bouton Nouvelle discussion (compact pour ne plus jamais déborder sur desktop ni mobile) --}}
+      <a
+        href="{{ urlFor('users.index') }}"
+        title="Nouvelle discussion"
+        aria-label="Nouvelle discussion"
+        class="inline-flex h-9 items-center gap-1.5 rounded-xl bg-brand px-3 text-xs font-semibold text-white shadow-brand transition hover:bg-brand-600 active:scale-95"
+      >
+        @svg('lucide:square-pen', { width: 15, height: 15 })
+        <span>Nouveau</span>
+      </a>
+    </div>
+  </div>
+
+  {{-- Barre de recherche & filtres style WhatsApp (visible s'il y a des conversations) --}}
+  <div class="px-4 pb-2.5 {{ conversations.length ? '' : 'hidden' }}">
+    <div class="relative">
+      <span class="pointer-events-none absolute inset-y-0 left-0 grid w-9 place-items-center text-muted">
+        @svg('lucide:search', { width: 15, height: 15 })
+      </span>
+      <input
+        type="search"
+        x-model="search"
+        placeholder="Rechercher une discussion…"
+        class="h-9 w-full rounded-xl border border-line bg-paper/80 pl-9 pr-8 text-xs font-medium outline-none transition placeholder:text-muted focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/15"
+      />
+      <button
+        type="button"
+        x-show="search.length > 0"
+        x-cloak
+        x-on:click="search = ''"
+        class="absolute inset-y-0 right-0 grid w-8 place-items-center text-muted hover:text-ink cursor-pointer"
+        aria-label="Effacer la recherche"
+      >
+        @svg('lucide:x', { width: 14, height: 14 })
+      </button>
+    </div>
+
+    {{-- Filtres rapides style WhatsApp : Toutes, Directes, Groupes --}}
+    <div class="mt-2.5 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+      <button
+        type="button"
+        x-on:click="filter = 'all'"
+        :class="filter === 'all' ? 'bg-ink text-white font-bold shadow-sm' : 'bg-paper text-muted hover:text-ink hover:bg-paper/80 font-medium'"
+        class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition whitespace-nowrap cursor-pointer"
+      >
+        <span>Toutes</span>
+      </button>
+      <button
+        type="button"
+        x-on:click="filter = 'direct'"
+        :class="filter === 'direct' ? 'bg-ink text-white font-bold shadow-sm' : 'bg-paper text-muted hover:text-ink hover:bg-paper/80 font-medium'"
+        class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition whitespace-nowrap cursor-pointer"
+      >
+        <span>Directes</span>
+        <span
+          x-show="unreadDirectCount > 0"
+          x-cloak
+          x-text="unreadDirectCount > 99 ? '99+' : unreadDirectCount"
+          class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-bold text-white shadow-sm"
+        ></span>
+      </button>
+      <button
+        type="button"
+        x-on:click="filter = 'groups'"
+        :class="filter === 'groups' ? 'bg-ink text-white font-bold shadow-sm' : 'bg-paper text-muted hover:text-ink hover:bg-paper/80 font-medium'"
+        class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition whitespace-nowrap cursor-pointer"
+      >
+        <span>Groupes</span>
+        <span
+          x-show="unreadGroupCount > 0"
+          x-cloak
+          x-text="unreadGroupCount > 99 ? '99+' : unreadGroupCount"
+          class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-bold text-white shadow-sm"
+        ></span>
+      </button>
+    </div>
+  </div>
+
+  {{-- Message si aucun résultat après recherche/filtre --}}
+  <div
+    x-ref="noMatch"
+    class="hidden flex-1 flex-col items-center justify-center p-8 text-center text-muted"
+  >
+    <span class="grid size-12 place-items-center rounded-2xl bg-paper text-muted mb-2">
+      @svg('lucide:search-x', { width: 22, height: 22 })
+    </span>
+    <p class="text-sm font-semibold text-ink">Aucune discussion trouvée</p>
+    <p class="text-xs text-muted mt-1">Essayez un autre mot clé ou filtre.</p>
   </div>
 
   <ul
@@ -43,4 +138,14 @@
       @end
     </div>
   @end
+
+  {{-- Floating Action Button (FAB) style WhatsApp sur téléphone --}}
+  <a
+    href="{{ urlFor('users.index') }}"
+    aria-label="Nouvelle discussion"
+    title="Nouvelle discussion"
+    class="fixed bottom-20 right-5 z-30 flex size-14 items-center justify-center rounded-2xl bg-brand text-white shadow-brand transition active:scale-90 hover:bg-brand-600 sm:hidden"
+  >
+    @svg('lucide:message-square-plus', { width: 24, height: 24 })
+  </a>
 </div>

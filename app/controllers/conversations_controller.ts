@@ -1,5 +1,6 @@
 import ConversationPresenter from '#services/conversation_presenter'
 import ConversationService from '#services/conversation_service'
+import RealtimeService from '#services/realtime_service'
 import { startConversationValidator } from '#validators/conversation'
 import type { HttpContext } from '@adonisjs/core/http'
 
@@ -10,6 +11,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 export default class ConversationsController {
   private conversations = new ConversationService()
   private presenter = new ConversationPresenter()
+  private realtime = new RealtimeService()
 
   /**
    * Liste des conversations (page d'accueil de l'utilisateur connecté)
@@ -30,8 +32,11 @@ export default class ConversationsController {
    */
   async show({ auth, params, view }: HttpContext) {
     const user = auth.getUserOrFail()
+    const conversationId = Number(params.id)
 
-    const conversation = await this.conversations.findForMember(user, Number(params.id))
+    const conversation = await this.conversations.findForMember(user, conversationId)
+    await this.conversations.markAsRead(conversation.id, user.id)
+
     const [items, messages] = await Promise.all([
       this.conversations.listFor(user),
       this.conversations.history(conversation, user),
@@ -56,15 +61,80 @@ export default class ConversationsController {
    */
   async card({ auth, params, request, view }: HttpContext) {
     const user = auth.getUserOrFail()
+    const conversationId = Number(params.id)
 
-    const conversation = await this.conversations.findForMember(user, Number(params.id))
+    const conversation = await this.conversations.findForMember(user, conversationId)
+    const isActive = conversation.id === Number(request.input('active'))
+
+    if (isActive) {
+      await this.conversations.markAsRead(conversation.id, user.id)
+    }
+
     const lastMessage = await this.conversations.lastMessageOf(conversation, user)
-    const [item] = await this.presenter.cards([{ conversation, lastMessage }], user)
+    const unreadMap = await this.conversations.unreadCountsFor([conversation.id], user)
+    const unreadCount = isActive ? 0 : (unreadMap.get(conversation.id) ?? 0)
+
+    const [item] = await this.presenter.cards(
+      [{ conversation, lastMessage, unreadCount }],
+      user
+    )
 
     return view.render('fragments/conversation_card', {
       item,
-      active: item.id === Number(request.input('active')),
+      active: isActive,
     })
+  }
+
+  /**
+   * Marque la conversation comme lue par l'utilisateur connecté
+   */
+  async read({ auth, params, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conversationId = Number(params.id)
+
+    const conversation = await this.conversations.findForMember(user, conversationId)
+    await this.conversations.markAsRead(conversation.id, user.id)
+
+    return response.noContent()
+  }
+
+  /**
+   * Diffuse le signal « en train d'écrire » aux autres membres de la conversation
+   */
+  async typing({ auth, params, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conversationId = Number(params.id)
+
+    const isMember = await this.conversations.isMember(user.id, conversationId)
+    if (!isMember) {
+      return response.forbidden()
+    }
+
+    this.realtime.userTyping(conversationId, user)
+
+    return response.noContent()
+  }
+
+  /**
+   * Recherche des messages dans une conversation
+   */
+  async search({ auth, params, request, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conversationId = Number(params.id)
+
+    const conversation = await this.conversations.findForMember(user, conversationId)
+    const term = String(request.input('q', '')).trim()
+
+    const results = await this.conversations.search(conversation, user, term)
+
+    return response.json(
+      results.map((msg) => ({
+        id: msg.id,
+        body: msg.body,
+        time: msg.createdAt.toFormat('HH:mm'),
+        senderName: msg.sender?.fullName ?? msg.sender?.email,
+      }))
+    )
   }
 
   /**

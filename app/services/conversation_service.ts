@@ -8,6 +8,7 @@ import { NOT_HIDDEN_FOR_USER } from '#services/message_rules'
 export type ConversationWithLastMessage = {
   conversation: Conversation
   lastMessage: Message | null
+  unreadCount?: number
 }
 
 /**
@@ -40,14 +41,16 @@ export default class ConversationService {
       })
       .orderByRaw('last_message_at DESC NULLS LAST, created_at DESC')
 
-    const lastMessages = await this.lastMessagesOf(
-      conversations.map((item) => item.id),
-      user
-    )
+    const conversationIds = conversations.map((item) => item.id)
+    const [lastMessages, unreadCounts] = await Promise.all([
+      this.lastMessagesOf(conversationIds, user),
+      this.unreadCountsFor(conversationIds, user),
+    ])
 
     return conversations.map((conversation) => ({
       conversation,
       lastMessage: lastMessages.get(conversation.id) ?? null,
+      unreadCount: unreadCounts.get(conversation.id) ?? 0,
     }))
   }
 
@@ -119,6 +122,26 @@ export default class ConversationService {
     const lastMessages = await this.lastMessagesOf([conversation.id], viewer)
 
     return lastMessages.get(conversation.id) ?? null
+  }
+
+  /**
+   * Recherche les messages d'une conversation contenant un terme,
+   * sans ceux masqués ou supprimés.
+   */
+  async search(conversation: Conversation, viewer: User, term: string) {
+    const trimmed = term.trim()
+    if (!trimmed) {
+      return []
+    }
+
+    return Message.query()
+      .where('conversation_id', conversation.id)
+      .whereNull('deleted_at')
+      .whereRaw(NOT_HIDDEN_FOR_USER, [viewer.id])
+      .whereILike('body', `%${trimmed}%`)
+      .preload('sender')
+      .orderBy('id', 'desc')
+      .limit(50)
   }
 
   /**
@@ -196,5 +219,56 @@ export default class ConversationService {
     }
 
     return lastMessages
+  }
+
+  /**
+   * Nombre de messages non lus pour chacune des conversations.
+   */
+  async unreadCountsFor(conversationIds: number[], viewer: User): Promise<Map<number, number>> {
+    const unreadMap = new Map<number, number>()
+    if (conversationIds.length === 0) {
+      return unreadMap
+    }
+
+    const notHiddenQuery = NOT_HIDDEN_FOR_USER.replace(/messages\./g, 'm.')
+
+    const rows = await db
+      .from('messages as m')
+      .join('conversation_members as cm', 'cm.conversation_id', 'm.conversation_id')
+      .where('cm.user_id', viewer.id)
+      .whereIn('m.conversation_id', conversationIds)
+      .where('m.sender_id', '!=', viewer.id)
+      .whereNull('m.deleted_at')
+      .whereRaw('m.id > COALESCE(cm.last_read_message_id, 0)')
+      .whereRaw(notHiddenQuery, [viewer.id])
+      .groupBy('m.conversation_id')
+      .select('m.conversation_id')
+      .count('* as total')
+
+    for (const row of rows) {
+      unreadMap.set(Number(row.conversation_id), Number(row.total))
+    }
+
+    return unreadMap
+  }
+
+  /**
+   * Marque tous les messages actuels de la conversation comme lus pour cet utilisateur.
+   */
+  async markAsRead(conversationId: number, userId: number) {
+    const latestMessage = await Message.query()
+      .where('conversation_id', conversationId)
+      .orderBy('id', 'desc')
+      .first()
+
+    if (latestMessage) {
+      await ConversationMember.query()
+        .where('conversation_id', conversationId)
+        .where('user_id', userId)
+        .where((q) => {
+          q.whereNull('last_read_message_id').orWhere('last_read_message_id', '<', latestMessage.id)
+        })
+        .update({ last_read_message_id: latestMessage.id })
+    }
   }
 }

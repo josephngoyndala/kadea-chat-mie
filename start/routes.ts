@@ -47,6 +47,7 @@ router
 router
   .group(() => {
     router.post('logout', [controllers.Session, 'destroy'])
+    router.post('presence/ping', [controllers.Session, 'ping'])
 
     router.get('dashboard', [controllers.Conversations, 'index']).as('dashboard')
     router
@@ -54,6 +55,15 @@ router
       .where('id', router.matchers.number())
     router
       .get('conversations/:id/card', [controllers.Conversations, 'card'])
+      .where('id', router.matchers.number())
+    router
+      .post('conversations/:id/read', [controllers.Conversations, 'read'])
+      .where('id', router.matchers.number())
+    router
+      .post('conversations/:id/typing', [controllers.Conversations, 'typing'])
+      .where('id', router.matchers.number())
+    router
+      .get('conversations/:id/search', [controllers.Conversations, 'search'])
       .where('id', router.matchers.number())
     router.post('conversations', [controllers.Conversations, 'store'])
 

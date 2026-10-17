@@ -1,7 +1,7 @@
 @layouts.messenger({ title: header.title })
-  <div class="flex min-h-0 flex-1">
+  <div class="flex min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden">
     {{-- Liste : visible à côté de la discussion à partir de 1024 px --}}
-    <aside class="hidden min-h-0 w-[380px] flex-none flex-col border-r border-line lg:flex">
+    <aside class="hidden min-h-0 w-[380px] max-w-full flex-none flex-col border-r border-line lg:flex">
       @include('partials/conversation_list')
     </aside>
 
@@ -9,7 +9,10 @@
       class="flex min-h-0 min-w-0 flex-1 flex-col bg-paper"
       x-data="conversationChat"
       x-on:submit="handleSubmit($event)"
+      data-user-id="{{ auth?.user?.id }}"
       data-conversation-id="{{ activeId }}"
+      data-other-user-id="{{ header.otherUserId ?? '' }}"
+      data-is-online="{{ header.isOnline ? '1' : '0' }}"
       data-message-url="{{ urlFor('messages.show', { conversationId: activeId, messageId: '0' }) }}"
       data-catch-up-url="{{ urlFor('messages.index', { conversationId: activeId }) }}"
     >
@@ -32,15 +35,118 @@
           @if(header.isGroup)
             <a href="{{ urlFor('group_members.index', { conversationId: activeId }) }}" class="block min-w-0">
               <h1 class="truncate text-base font-bold tracking-tight">{{ header.title }}</h1>
-              <p class="truncate text-xs text-muted">
+              <p x-show="!typingUser" class="truncate text-xs text-muted">
                 {{ header.memberCount }} membre{{ header.memberCount > 1 ? 's' : '' }} · Appuyez pour voir le groupe
+              </p>
+              <p x-show="typingUser" x-cloak class="truncate text-xs font-bold text-brand flex items-center gap-1.5">
+                <span class="inline-flex gap-0.5">
+                  <span class="size-1 rounded-full bg-brand animate-bounce [animation-delay:-0.3s]"></span>
+                  <span class="size-1 rounded-full bg-brand animate-bounce [animation-delay:-0.15s]"></span>
+                  <span class="size-1 rounded-full bg-brand animate-bounce"></span>
+                </span>
+                <span x-text="typingUser + ' est en train d’écrire…'"></span>
               </p>
             </a>
           @else
             <h1 class="truncate text-base font-bold tracking-tight">{{ header.title }}</h1>
+            <p x-show="!typingUser && isOnline" class="truncate text-xs text-emerald-600 flex items-center gap-1.5 font-semibold">
+              <span class="size-2 rounded-full bg-emerald-500 shadow-sm animate-pulse"></span>
+              <span>En ligne</span>
+            </p>
+            <p x-show="!typingUser && !isOnline" class="truncate text-xs text-muted flex items-center gap-1.5 font-medium">
+              <span class="size-2 rounded-full bg-zinc-300"></span>
+              <span>Hors ligne</span>
+            </p>
+            <p x-show="typingUser" x-cloak class="truncate text-xs font-bold text-brand flex items-center gap-1.5">
+              <span class="inline-flex gap-0.5">
+                <span class="size-1 rounded-full bg-brand animate-bounce [animation-delay:-0.3s]"></span>
+                <span class="size-1 rounded-full bg-brand animate-bounce [animation-delay:-0.15s]"></span>
+                <span class="size-1 rounded-full bg-brand animate-bounce"></span>
+              </span>
+              <span>en train d’écrire…</span>
+            </p>
           @end
         </div>
+
+        {{-- Actions d'en-tête : Bouton Recherche style WhatsApp --}}
+        <div class="flex items-center gap-1 flex-none">
+          <button
+            type="button"
+            x-on:click="toggleSearch()"
+            aria-label="Rechercher dans la discussion"
+            title="Rechercher dans la discussion"
+            class="grid size-10 place-items-center rounded-full text-muted transition hover:bg-paper hover:text-ink cursor-pointer"
+          >
+            @svg('lucide:search', { width: 19, height: 19 })
+          </button>
+        </div>
       </header>
+
+      {{-- Barre de recherche intégrée style WhatsApp --}}
+      <div
+        x-show="searchOpen"
+        x-cloak
+        x-transition
+        class="flex flex-none items-center gap-2 border-b border-line bg-white/95 backdrop-blur px-3 py-2 sm:px-4 shadow-sm"
+      >
+        <span class="grid size-8 place-items-center text-muted flex-none">
+          @svg('lucide:search', { width: 16, height: 16 })
+        </span>
+        <input
+          type="search"
+          x-ref="searchInput"
+          x-model="searchQuery"
+          x-on:input="performSearch()"
+          x-on:keydown.escape="closeSearch()"
+          x-on:keydown.enter.prevent="nextSearchResult()"
+          placeholder="Rechercher dans cette discussion…"
+          class="h-9 min-w-0 flex-1 rounded-xl border border-line bg-paper/80 px-3 text-xs font-medium outline-none transition placeholder:text-muted focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/15"
+        />
+
+        {{-- Compteur et navigation --}}
+        <div
+          x-show="searchQuery.trim().length > 0"
+          x-cloak
+          class="flex items-center gap-1 flex-none"
+        >
+          <span
+            class="text-xs font-bold px-1.5 py-0.5 rounded-md"
+            :class="searchResults.length > 0 ? 'text-ink bg-paper' : 'text-rose-600 bg-rose-50'"
+            x-text="searchResults.length > 0 ? (currentSearchIndex + 1) + ' / ' + searchResults.length : '0 résultat'"
+          ></span>
+
+          <button
+            type="button"
+            x-on:click="prevSearchResult()"
+            :disabled="searchResults.length === 0"
+            aria-label="Résultat précédent"
+            title="Précédent"
+            class="grid size-8 place-items-center rounded-lg border border-line bg-white text-ink transition hover:bg-paper disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+          >
+            @svg('lucide:chevron-up', { width: 15, height: 15 })
+          </button>
+          <button
+            type="button"
+            x-on:click="nextSearchResult()"
+            :disabled="searchResults.length === 0"
+            aria-label="Résultat suivant"
+            title="Suivant"
+            class="grid size-8 place-items-center rounded-lg border border-line bg-white text-ink transition hover:bg-paper disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+          >
+            @svg('lucide:chevron-down', { width: 15, height: 15 })
+          </button>
+        </div>
+
+        <button
+          type="button"
+          x-on:click="closeSearch()"
+          aria-label="Fermer la recherche"
+          title="Fermer"
+          class="grid size-8 place-items-center rounded-lg text-muted hover:bg-paper hover:text-ink cursor-pointer flex-none"
+        >
+          @svg('lucide:x', { width: 16, height: 16 })
+        </button>
+      </div>
 
       {{-- Messages --}}
       <div class="relative flex min-h-0 flex-1 flex-col">
@@ -69,6 +175,22 @@
                 @!messageBubble({ message: message, conversationId: activeId })
               @end
             @end
+
+            {{-- Bulle d'indication de saisie animée (style WhatsApp) --}}
+            <div
+              x-show="typingUser"
+              x-cloak
+              x-transition
+              class="flex items-center gap-2 self-start rounded-2xl rounded-bl-md bg-white px-3.5 py-2 text-xs font-medium text-muted shadow-card my-1"
+            >
+              <span class="font-bold text-ink" x-text="typingUser"></span>
+              <span>écrit</span>
+              <span class="inline-flex items-center gap-1 py-1">
+                <span class="size-1.5 rounded-full bg-brand animate-bounce [animation-delay:-0.32s]"></span>
+                <span class="size-1.5 rounded-full bg-brand animate-bounce [animation-delay:-0.16s]"></span>
+                <span class="size-1.5 rounded-full bg-brand animate-bounce"></span>
+              </span>
+            </div>
           </div>
         </div>
 
@@ -119,7 +241,7 @@
             placeholder="Écrire un message…"
             x-ref="field"
             x-model="draft"
-            x-on:input="autosize()"
+            x-on:input="onInput()"
             x-on:keydown="onKeydown($event)"
             class="max-h-36 min-h-12 flex-1 resize-none rounded-3xl border border-line bg-paper px-4 py-3 text-[15px] leading-6 outline-none transition placeholder:text-[#8d8d8d] focus:border-brand focus:bg-white focus:ring-4 focus:ring-brand/15"
           ></textarea>
