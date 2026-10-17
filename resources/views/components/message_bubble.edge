@@ -65,6 +65,7 @@
                   type="button"
                   data-zoom-src="{{ fileUrl }}"
                   data-zoom-alt="{{ file.originalName }}"
+                  x-on:click.stop
                   class="block max-w-full overflow-hidden rounded-xl {{
                     message.isMine
                       ? 'ring-1 ring-white/30'
@@ -78,6 +79,20 @@
                     loading="lazy"
                   />
                 </button>
+              @elseif(file.isVideo)
+                <video
+                  x-on:click.stop
+                  controls
+                  playsinline
+                  preload="metadata"
+                  class="max-h-72 w-full rounded-xl {{
+                    message.isMine
+                      ? 'ring-1 ring-white/30'
+                      : 'ring-1 ring-line'
+                  }}"
+                >
+                  <source src="{{ fileUrl }}" type="{{ file.mimeType }}" />
+                </video>
               @else
                 <a
                   href="{{ fileUrl }}"

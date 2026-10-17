@@ -440,6 +440,9 @@ Alpine.data('conversationChat', function () {
     onFilesSelected(event) {
       const picked = [...(event.target.files ?? [])]
       event.target.value = ''
+      this.error = ''
+
+      const allowed = /\.(jpe?g|png|webp|gif|mp4|webm|mov|pdf|txt|zip)$/i
 
       for (const file of picked) {
         if (this.pendingFiles.length >= 5) {
@@ -447,9 +450,30 @@ Alpine.data('conversationChat', function () {
           break
         }
 
+        if (file.size > 20 * 1024 * 1024) {
+          this.error = 'Un fichier dépasse la taille maximale de 20 Mo.'
+          continue
+        }
+
+        if (!allowed.test(file.name)) {
+          this.error =
+            'Format non accepté. Images, vidéos (MP4, WebM, MOV), PDF, TXT ou ZIP uniquement.'
+          continue
+        }
+
         const key = `${file.name}-${file.size}-${file.lastModified}`
-        const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : null
-        this.pendingFiles.push({ key, file, name: file.name, preview })
+        let kind = 'file'
+        let preview = null
+
+        if (file.type.startsWith('image/')) {
+          kind = 'image'
+          preview = URL.createObjectURL(file)
+        } else if (file.type.startsWith('video/')) {
+          kind = 'video'
+          preview = URL.createObjectURL(file)
+        }
+
+        this.pendingFiles.push({ key, file, name: file.name, preview, kind })
       }
     },
 
@@ -470,16 +494,33 @@ Alpine.data('conversationChat', function () {
       this.pendingFiles = []
     },
 
+    csrfFromForm(form) {
+      return form.querySelector('input[name="_csrf"]')?.value ?? ''
+    },
+
     buildSendFormData(form) {
-      const formData = new FormData(form)
-      formData.set('body', this.draft.trim())
-      formData.delete('attachments[]')
+      const formData = new FormData()
+      const csrf = this.csrfFromForm(form)
+      if (csrf) {
+        formData.append('_csrf', csrf)
+      }
+      formData.append('body', this.draft.trim())
 
       for (const item of this.pendingFiles) {
         formData.append('attachments[]', item.file, item.file.name)
       }
 
       return formData
+    },
+
+    buildTextPayload(form) {
+      const params = new URLSearchParams()
+      const csrf = this.csrfFromForm(form)
+      if (csrf) {
+        params.append('_csrf', csrf)
+      }
+      params.append('body', this.draft.trim())
+      return params
     },
 
     sendTypingSignal() {
@@ -709,7 +750,7 @@ Alpine.data('conversationChat', function () {
         const payload =
           this.pendingFiles.length > 0
             ? this.buildSendFormData(form)
-            : new URLSearchParams(new FormData(form))
+            : this.buildTextPayload(form)
         const response = await postToServer(form, payload)
 
         if (response.status === 201) {
