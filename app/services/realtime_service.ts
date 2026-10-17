@@ -1,6 +1,7 @@
 import transmit from '@adonisjs/transmit/services/main'
 import type Conversation from '#models/conversation'
 import type Message from '#models/message'
+import type User from '#models/user'
 
 /**
  * Annonce en temps réel ce qui se passe dans les conversations. Les
@@ -20,6 +21,29 @@ export default class RealtimeService {
     })
 
     this.conversationUpdated(conversation)
+  }
+
+  /**
+   * Un membre est en train d'écrire dans la conversation.
+   */
+  userTyping(conversationId: number, user: User) {
+    const firstName = user.fullName?.split(' ')[0] ?? user.email.split('@')[0]
+    transmit.broadcast(`conversations/${conversationId}`, {
+      type: 'user.typing',
+      userId: user.id,
+      userName: firstName,
+    })
+  }
+
+  /**
+   * Diffuse le changement d'état de présence (en ligne / hors ligne) d'un utilisateur.
+   */
+  userPresence(userId: number, isOnline: boolean) {
+    transmit.broadcast('presence', {
+      type: 'user.presence',
+      userId,
+      isOnline,
+    })
   }
 
   /**

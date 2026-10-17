@@ -1,7 +1,9 @@
 @layouts.messenger({ title: header.title })
   <div class="flex min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden">
     {{-- Liste : visible à côté de la discussion à partir de 1024 px --}}
-    <aside class="hidden min-h-0 w-[380px] max-w-full flex-none flex-col border-r border-line lg:flex">
+    <aside
+      class="hidden min-h-0 w-[380px] max-w-full flex-none flex-col border-r border-line lg:flex"
+    >
       @include('partials/conversation_list')
     </aside>
 
@@ -9,11 +11,16 @@
       class="flex min-h-0 min-w-0 flex-1 flex-col bg-paper"
       x-data="conversationChat"
       x-on:submit="handleSubmit($event)"
+      data-user-id="{{ auth?.user?.id }}"
       data-conversation-id="{{ activeId }}"
+      data-other-user-id="{{ header.otherUserId ?? '' }}"
+      data-is-online="{{ header.isOnline ? '1' : '0' }}"
       data-message-url="{{ urlFor('messages.show', { conversationId: activeId, messageId: '0' }) }}"
       data-catch-up-url="{{ urlFor('messages.index', { conversationId: activeId }) }}"
     >
-      <header class="flex flex-none items-center gap-3 border-b border-line bg-white px-3 py-3 sm:px-4">
+      <header
+        class="flex flex-none items-center gap-3 border-b border-line bg-white px-3 py-3 sm:px-4"
+      >
         <a
           href="{{ urlFor('dashboard') }}"
           aria-label="Retour aux discussions"
@@ -21,7 +28,6 @@
         >
           @svg('lucide:arrow-left', { width: 22, height: 22 })
         </a>
-
         @if(header.avatarUrl)
           @!avatar({ src: header.avatarUrl, name: header.title, size: 44 })
         @else
@@ -30,18 +36,202 @@
 
         <div class="min-w-0 flex-1">
           @if(header.isGroup)
-            <a href="{{ urlFor('group_members.index', { conversationId: activeId }) }}" class="block min-w-0">
+            <a
+              href="{{ urlFor('group_members.index', { conversationId: activeId }) }}"
+              class="block min-w-0"
+            >
               <h1 class="truncate text-base font-bold tracking-tight">{{ header.title }}</h1>
-              <p class="truncate text-xs text-muted">
-                {{ header.memberCount }} membre{{ header.memberCount > 1 ? 's' : '' }} · Appuyez pour voir le groupe
+              <p x-show="!typingUser" class="truncate text-xs text-muted">
+                {{ header.memberCount }}
+                membre{{ header.memberCount > 1 ? 's' : '' }}
+                · Appuyez pour voir le groupe
+              </p>
+              <p
+                x-show="typingUser"
+                x-cloak
+                class="truncate text-xs font-bold text-brand flex items-center gap-1.5"
+              >
+                <span class="inline-flex gap-0.5">
+                  <span
+                    class="size-1 rounded-full bg-brand animate-bounce [animation-delay:-0.3s]"
+                  ></span>
+                  <span
+                    class="size-1 rounded-full bg-brand animate-bounce [animation-delay:-0.15s]"
+                  ></span>
+                  <span class="size-1 rounded-full bg-brand animate-bounce"></span>
+                </span>
+                <span x-text="typingUser + ' est en train d’écrire…'"></span>
               </p>
             </a>
           @else
             <h1 class="truncate text-base font-bold tracking-tight">{{ header.title }}</h1>
+            <p
+              x-show="!typingUser && isOnline"
+              class="truncate text-xs text-emerald-600 flex items-center gap-1.5 font-semibold"
+            >
+              <span class="size-2 rounded-full bg-emerald-500 shadow-sm animate-pulse"></span>
+              <span>En ligne</span>
+            </p>
+            <p
+              x-show="!typingUser && !isOnline"
+              class="truncate text-xs text-muted flex items-center gap-1.5 font-medium"
+            >
+              <span class="size-2 rounded-full bg-zinc-300"></span>
+              <span>Hors ligne</span>
+            </p>
+            <p
+              x-show="typingUser"
+              x-cloak
+              class="truncate text-xs font-bold text-brand flex items-center gap-1.5"
+            >
+              <span class="inline-flex gap-0.5">
+                <span
+                  class="size-1 rounded-full bg-brand animate-bounce [animation-delay:-0.3s]"
+                ></span>
+                <span
+                  class="size-1 rounded-full bg-brand animate-bounce [animation-delay:-0.15s]"
+                ></span>
+                <span class="size-1 rounded-full bg-brand animate-bounce"></span>
+              </span>
+              <span>en train d’écrire…</span>
+            </p>
           @end
         </div>
-      </header>
+        {{-- Actions d'en-tête --}}
+        <div class="relative flex items-center gap-1 flex-none" x-data="{ menuOpen: false }">
+          <button
+            type="button"
+            x-on:click="toggleSearch()"
+            aria-label="Rechercher dans la discussion"
+            title="Rechercher dans la discussion"
+            class="grid size-10 place-items-center rounded-full text-muted transition hover:bg-paper hover:text-ink cursor-pointer"
+          >
+            @svg('lucide:search', { width: 19, height: 19 })
+          </button>
 
+          <button
+            type="button"
+            x-on:click="menuOpen = !menuOpen"
+            aria-label="Options de la discussion"
+            aria-haspopup="menu"
+            x-bind:aria-expanded="menuOpen"
+            class="grid size-10 place-items-center rounded-full text-muted transition hover:bg-paper hover:text-ink cursor-pointer"
+          >
+            @svg('lucide:ellipsis-vertical', { width: 19, height: 19 })
+          </button>
+
+          <div
+            x-show="menuOpen"
+            x-cloak
+            x-on:click.outside="menuOpen = false"
+            x-transition
+            role="menu"
+            class="absolute right-0 top-full z-20 mt-1 min-w-[220px] overflow-hidden rounded-2xl border border-line bg-white py-1 shadow-card"
+          >
+            @form({
+              route: 'conversations.destroy',
+              routeParams: { id: activeId },
+              method: 'POST',
+              class: 'block',
+              'x-data': '{ confirming: false }',
+            })
+              <button
+                type="button"
+                x-show="!confirming"
+                x-on:click="confirming = true"
+                role="menuitem"
+                class="flex w-full cursor-pointer items-center gap-2 px-4 py-3 text-left text-sm font-semibold text-brand transition hover:bg-paper"
+              >
+                @svg('lucide:trash-2', { width: 16, height: 16 })
+                
+                Supprimer la discussion
+
+              </button>
+              <div x-show="confirming" x-cloak class="px-3 py-2">
+                <p class="px-1 text-xs text-muted">Retirer cette discussion de votre liste ?</p>
+                <div class="mt-2 flex gap-2">
+                  <button
+                    type="submit"
+                    class="flex-1 cursor-pointer rounded-xl bg-brand px-3 py-2 text-xs font-bold text-white"
+                  >
+                    Confirmer
+                  </button>
+                  <button
+                    type="button"
+                    x-on:click="confirming = false"
+                    class="cursor-pointer rounded-xl px-3 py-2 text-xs font-semibold text-muted hover:bg-paper"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              </div>
+            @end
+          </div>
+        </div>
+      </header>
+      {{-- Barre de recherche intégrée style WhatsApp --}}
+      <div
+        x-show="searchOpen"
+        x-cloak
+        x-transition
+        class="flex flex-none items-center gap-2 border-b border-line bg-white/95 backdrop-blur px-3 py-2 sm:px-4 shadow-sm"
+      >
+        <span class="grid size-8 place-items-center text-muted flex-none">
+          @svg('lucide:search', { width: 16, height: 16 })
+        </span>
+        <input
+          type="search"
+          x-ref="searchInput"
+          x-model="searchQuery"
+          x-on:input="performSearch()"
+          x-on:keydown.escape="closeSearch()"
+          x-on:keydown.enter.prevent="nextSearchResult()"
+          placeholder="Rechercher dans cette discussion…"
+          class="h-9 min-w-0 flex-1 rounded-xl border border-line bg-paper/80 px-3 text-xs font-medium outline-none transition placeholder:text-muted focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/15"
+        />
+        {{-- Compteur et navigation --}}
+        <div
+          x-show="searchQuery.trim().length > 0"
+          x-cloak
+          class="flex items-center gap-1 flex-none"
+        >
+          <span
+            class="text-xs font-bold px-1.5 py-0.5 rounded-md"
+            :class="searchResults.length > 0 ? 'text-ink bg-paper' : 'text-rose-600 bg-rose-50'"
+            x-text="searchResults.length > 0 ? (currentSearchIndex + 1) + ' / ' + searchResults.length : '0 résultat'"
+          ></span>
+          <button
+            type="button"
+            x-on:click="prevSearchResult()"
+            :disabled="searchResults.length === 0"
+            aria-label="Résultat précédent"
+            title="Précédent"
+            class="grid size-8 place-items-center rounded-lg border border-line bg-white text-ink transition hover:bg-paper disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+          >
+            @svg('lucide:chevron-up', { width: 15, height: 15 })
+          </button>
+          <button
+            type="button"
+            x-on:click="nextSearchResult()"
+            :disabled="searchResults.length === 0"
+            aria-label="Résultat suivant"
+            title="Suivant"
+            class="grid size-8 place-items-center rounded-lg border border-line bg-white text-ink transition hover:bg-paper disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+          >
+            @svg('lucide:chevron-down', { width: 15, height: 15 })
+          </button>
+        </div>
+
+        <button
+          type="button"
+          x-on:click="closeSearch()"
+          aria-label="Fermer la recherche"
+          title="Fermer"
+          class="grid size-8 place-items-center rounded-lg text-muted hover:bg-paper hover:text-ink cursor-pointer flex-none"
+        >
+          @svg('lucide:x', { width: 16, height: 16 })
+        </button>
+      </div>
       {{-- Messages --}}
       <div class="relative flex min-h-0 flex-1 flex-col">
         <div
@@ -51,27 +241,52 @@
         >
           @if(!groups.length)
             <div data-empty class="my-auto flex flex-col items-center gap-3 text-center">
-              <span class="grid size-16 place-items-center rounded-2xl bg-white text-brand shadow-card">
+              <span
+                class="grid size-16 place-items-center rounded-2xl bg-white text-brand shadow-card"
+              >
                 @svg('lucide:hand-heart', { width: 28, height: 28 })
               </span>
               <p class="max-w-xs text-sm text-muted">
-                Aucun message pour l'instant. Dites bonjour à {{ header.title }} !
+                Aucun message pour l'instant. Dites bonjour à
+                {{ header.title }}
+                !
               </p>
             </div>
           @end
 
           <div x-ref="messages" class="flex flex-col gap-2">
             @each(group in groups)
-              <p data-day-label class="mx-auto my-3 w-fit rounded-full bg-white px-3 py-1 text-xs font-semibold text-muted shadow-card">
+              <p
+                data-day-label
+                class="mx-auto my-3 w-fit rounded-full bg-white px-3 py-1 text-xs font-semibold text-muted shadow-card"
+              >
                 {{ group.label }}
               </p>
               @each(message in group.messages)
                 @!messageBubble({ message: message, conversationId: activeId })
               @end
             @end
+            {{-- Bulle d'indication de saisie animée (style WhatsApp) --}}
+            <div
+              x-show="typingUser"
+              x-cloak
+              x-transition
+              class="flex items-center gap-2 self-start rounded-2xl rounded-bl-md bg-white px-3.5 py-2 text-xs font-medium text-muted shadow-card my-1"
+            >
+              <span class="font-bold text-ink" x-text="typingUser"></span>
+              <span>écrit</span>
+              <span class="inline-flex items-center gap-1 py-1">
+                <span
+                  class="size-1.5 rounded-full bg-brand animate-bounce [animation-delay:-0.32s]"
+                ></span>
+                <span
+                  class="size-1.5 rounded-full bg-brand animate-bounce [animation-delay:-0.16s]"
+                ></span>
+                <span class="size-1.5 rounded-full bg-brand animate-bounce"></span>
+              </span>
+            </div>
           </div>
         </div>
-
         {{-- Nouveaux messages pendant que l'on lit plus haut --}}
         <button
           type="button"
@@ -85,7 +300,6 @@
           <span x-text="unseen > 1 ? unseen + ' nouveaux messages' : '1 nouveau message'"></span>
         </button>
       </div>
-
       {{-- Saisie --}}
       <div class="flex-none border-t border-line bg-white">
         <p
@@ -95,33 +309,130 @@
           class="flex items-center gap-2 bg-brand-50 px-4 py-2 text-sm font-medium text-brand"
         >
           @svg('lucide:loader-circle', { width: 16, height: 16, class: 'animate-spin' })
+          
           Connexion perdue, reconnexion en cours…
+
         </p>
 
-        <p x-show="error" x-cloak x-text="error" role="alert" class="px-4 pt-3 text-sm font-medium text-brand"></p>
-
+        <p
+          x-show="error"
+          x-cloak
+          x-text="error"
+          role="alert"
+          class="px-4 pt-3 text-sm font-medium text-brand"
+        ></p>
+        {{-- Aperçu des fichiers avant envoi --}}
+        <div
+          x-show="pendingFiles.length > 0"
+          x-cloak
+          class="flex gap-2 overflow-x-auto border-b border-line px-3 py-2 sm:px-4"
+        >
+          <template x-for="(item, index) in pendingFiles" x-bind:key="item.key">
+            <div class="relative flex-none">
+              <template x-if="item.kind === 'image'">
+                <img
+                  x-bind:src="item.preview"
+                  alt=""
+                  class="size-16 rounded-xl object-cover ring-1 ring-line"
+                />
+              </template>
+              <template x-if="item.kind === 'video'">
+                <video
+                  x-bind:src="item.preview"
+                  muted
+                  class="size-16 rounded-xl object-cover ring-1 ring-line"
+                ></video>
+              </template>
+              <template x-if="item.kind === 'file'">
+                <div
+                  class="flex size-16 flex-col items-center justify-center rounded-xl bg-paper px-1 text-center ring-1 ring-line"
+                >
+                  @svg('lucide:file', { width: 20, height: 20, class: 'text-muted' })
+                  <span
+                    class="mt-1 line-clamp-2 text-[10px] font-semibold text-muted"
+                    x-text="item.name"
+                  ></span>
+                </div>
+              </template>
+              <button
+                type="button"
+                x-on:click="removePendingFile(index)"
+                aria-label="Retirer le fichier"
+                class="absolute -right-1 -top-1 grid size-6 place-items-center rounded-full bg-ink text-white shadow"
+              >
+                @svg('lucide:x', { width: 12, height: 12 })
+              </button>
+            </div>
+          </template>
+        </div>
         @form({
           route: 'messages.store',
           routeParams: { conversationId: activeId },
           method: 'POST',
-          class: 'flex items-end gap-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4',
+          enctype: 'multipart/form-data',
+          class:
+            'flex items-end gap-1.5 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:gap-2 sm:p-4',
           'x-ref': 'form',
           'x-on:submit.prevent': 'send($event)',
         })
+          <input
+            type="file"
+            x-ref="fileInput"
+            x-on:change="onFilesSelected($event)"
+            multiple
+            accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,application/pdf,text/plain,.zip"
+            class="sr-only"
+          />
+
+          <div class="relative flex-none">
+            <button
+              type="button"
+              x-on:click="emojiOpen = !emojiOpen"
+              aria-label="Insérer un emoji"
+              class="grid size-11 place-items-center rounded-full text-muted transition hover:bg-paper hover:text-ink cursor-pointer"
+            >
+              @svg('lucide:smile', { width: 22, height: 22 })
+            </button>
+            <div
+              x-show="emojiOpen"
+              x-cloak
+              x-on:click.outside="emojiOpen = false"
+              x-transition
+              class="absolute bottom-full left-0 z-20 mb-2 grid w-[min(18rem,70vw)] grid-cols-8 gap-1 rounded-2xl border border-line bg-white p-2 shadow-card"
+            >
+              <template x-for="emoji in emojiChoices" x-bind:key="emoji">
+                <button
+                  type="button"
+                  x-on:click="insertEmoji(emoji)"
+                  class="grid size-9 place-items-center rounded-lg text-xl transition hover:bg-paper cursor-pointer"
+                  x-text="emoji"
+                ></button>
+              </template>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            x-on:click="$refs.fileInput.click()"
+            aria-label="Joindre un fichier ou une photo"
+            class="grid size-11 flex-none place-items-center rounded-full text-muted transition hover:bg-paper hover:text-ink cursor-pointer"
+          >
+            @svg('lucide:paperclip', { width: 22, height: 22 })
+          </button>
+
           <label for="message-body" class="sr-only">Votre message</label>
           <textarea
             id="message-body"
             name="body"
             rows="1"
             maxlength="2000"
-            required
             enterkeyhint="send"
             placeholder="Écrire un message…"
             x-ref="field"
             x-model="draft"
-            x-on:input="autosize()"
+            x-on:input="onInput()"
             x-on:keydown="onKeydown($event)"
-            class="max-h-36 min-h-12 flex-1 resize-none rounded-3xl border border-line bg-paper px-4 py-3 text-[15px] leading-6 outline-none transition placeholder:text-[#8d8d8d] focus:border-brand focus:bg-white focus:ring-4 focus:ring-brand/15"
+            class="max-h-36 min-h-12 min-w-0 flex-1 resize-none rounded-3xl border border-line bg-paper px-4 py-3 text-[15px] leading-6 outline-none transition placeholder:text-[#8d8d8d] focus:border-brand focus:bg-white focus:ring-4 focus:ring-brand/15"
           ></textarea>
 
           <button
@@ -134,7 +445,11 @@
               @svg('lucide:send-horizontal', { width: 20, height: 20 })
             </span>
             <span x-show="sending" x-cloak class="grid place-items-center">
-              @svg('lucide:loader-circle', { width: 20, height: 20, class: 'animate-spin' })
+              @svg('lucide:loader-circle', {
+                width: 20,
+                height: 20,
+                class: 'animate-spin',
+              })
             </span>
           </button>
         @end

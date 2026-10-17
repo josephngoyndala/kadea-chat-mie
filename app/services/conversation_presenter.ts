@@ -1,3 +1,4 @@
+import { DateTime } from 'luxon'
 import type Conversation from '#models/conversation'
 import type Message from '#models/message'
 import type User from '#models/user'
@@ -23,6 +24,18 @@ export type ConversationHeader = {
   avatarUrl: string | null
   isGroup: boolean
   memberCount: number
+  otherUserId: number | null
+  isOnline: boolean
+}
+
+export type MessageAttachmentView = {
+  id: number
+  originalName: string
+  storagePath: string
+  mimeType: string
+  isImage: boolean
+  isVideo: boolean
+  sizeLabel: string
 }
 
 export type MessageBubble = {
@@ -36,6 +49,7 @@ export type MessageBubble = {
   time: string
   authorName: string | null
   authorColor: number
+  attachments: MessageAttachmentView[]
 }
 
 export type MessageGroup = {
@@ -90,10 +104,22 @@ export default class ConversationPresenter {
    * En-tête d'une conversation ouverte.
    */
   async header(conversation: Conversation, viewer: User): Promise<ConversationHeader> {
+    const isGroup = conversation.type === 'group'
+    const otherMember = !isGroup
+      ? conversation.members.find((member) => member.userId !== viewer.id)
+      : null
+
+    const otherUser = otherMember?.user
+    const isOnline = Boolean(
+      otherUser?.lastSeenAt && DateTime.now().diff(otherUser.lastSeenAt, 'minutes').minutes < 2
+    )
+
     return {
       ...(await this.identity(conversation, viewer)),
-      isGroup: conversation.type === 'group',
+      isGroup,
       memberCount: conversation.members.length,
+      otherUserId: otherUser?.id ?? null,
+      isOnline,
     }
   }
 
@@ -139,11 +165,16 @@ export default class ConversationPresenter {
       isMine,
       isDeleted,
       isEdited: Boolean(message.editedAt) && !isDeleted,
-      canEdit: isMine && !isDeleted && isWithinEditWindow(message.createdAt),
+      canEdit:
+        isMine &&
+        !isDeleted &&
+        Boolean(message.body?.trim()) &&
+        isWithinEditWindow(message.createdAt),
       canDeleteForEveryone: isMine && !isDeleted,
       time: formatMessageTime(message.createdAt),
       authorName: showAuthor && !isMine ? (message.sender?.fullName ?? 'Membre') : null,
       authorColor: message.senderId % 6,
+      attachments: isDeleted ? [] : this.attachmentsOf(message),
     }
   }
 
@@ -217,7 +248,19 @@ export default class ConversationPresenter {
       return 'Message supprimé'
     }
 
-    const text = (message.body ?? '').replace(/\s+/g, ' ').trim()
+    let text = (message.body ?? '').replace(/\s+/g, ' ').trim()
+    if (!text && message.attachments && message.attachments.length > 0) {
+      const hasVideo = message.attachments.some((file) => file.mimeType.startsWith('video/'))
+      const hasImage = message.attachments.some((file) => file.mimeType.startsWith('image/'))
+      if (hasVideo) {
+        text = '🎬 Vidéo'
+      } else if (hasImage) {
+        text = '📷 Photo'
+      } else {
+        text = '📎 Fichier'
+      }
+    }
+
     const clipped = text.length > 80 ? `${text.slice(0, 80)}…` : text
 
     if (message.senderId === viewer.id) {
@@ -228,6 +271,32 @@ export default class ConversationPresenter {
       return `${firstName} : ${clipped}`
     }
     return clipped
+  }
+
+  private attachmentsOf(message: Message): MessageAttachmentView[] {
+    if (!message.attachments?.length) {
+      return []
+    }
+
+    return message.attachments.map((file) => ({
+      id: file.id,
+      originalName: file.originalName,
+      storagePath: file.storagePath,
+      mimeType: file.mimeType,
+      isImage: file.mimeType.startsWith('image/'),
+      isVideo: file.mimeType.startsWith('video/'),
+      sizeLabel: this.formatFileSize(file.sizeBytes),
+    }))
+  }
+
+  private formatFileSize(bytes: number) {
+    if (bytes < 1024) {
+      return `${bytes} o`
+    }
+    if (bytes < 1024 * 1024) {
+      return `${Math.round(bytes / 1024)} Ko`
+    }
+    return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`
   }
 
   private initialsOf(name: string) {

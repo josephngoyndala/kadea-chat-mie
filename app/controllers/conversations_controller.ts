@@ -1,5 +1,6 @@
 import ConversationPresenter from '#services/conversation_presenter'
 import ConversationService from '#services/conversation_service'
+import RealtimeService from '#services/realtime_service'
 import { startConversationValidator } from '#validators/conversation'
 import type { HttpContext } from '@adonisjs/core/http'
 
@@ -10,6 +11,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 export default class ConversationsController {
   private conversations = new ConversationService()
   private presenter = new ConversationPresenter()
+  private realtime = new RealtimeService()
 
   /**
    * Liste des conversations (page d'accueil de l'utilisateur connecté)
@@ -72,10 +74,7 @@ export default class ConversationsController {
     const unreadMap = await this.conversations.unreadCountsFor([conversation.id], user)
     const unreadCount = isActive ? 0 : (unreadMap.get(conversation.id) ?? 0)
 
-    const [item] = await this.presenter.cards(
-      [{ conversation, lastMessage, unreadCount }],
-      user
-    )
+    const [item] = await this.presenter.cards([{ conversation, lastMessage, unreadCount }], user)
 
     return view.render('fragments/conversation_card', {
       item,
@@ -97,6 +96,45 @@ export default class ConversationsController {
   }
 
   /**
+   * Diffuse le signal « en train d'écrire » aux autres membres de la conversation
+   */
+  async typing({ auth, params, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conversationId = Number(params.id)
+
+    const isMember = await this.conversations.isMember(user.id, conversationId)
+    if (!isMember) {
+      return response.forbidden()
+    }
+
+    this.realtime.userTyping(conversationId, user)
+
+    return response.noContent()
+  }
+
+  /**
+   * Recherche des messages dans une conversation
+   */
+  async search({ auth, params, request, response }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conversationId = Number(params.id)
+
+    const conversation = await this.conversations.findForMember(user, conversationId)
+    const term = String(request.input('q', '')).trim()
+
+    const results = await this.conversations.search(conversation, user, term)
+
+    return response.json(
+      results.map((msg) => ({
+        id: msg.id,
+        body: msg.body,
+        time: msg.createdAt.toFormat('HH:mm'),
+        senderName: msg.sender?.fullName ?? msg.sender?.email,
+      }))
+    )
+  }
+
+  /**
    * Démarre une conversation privée (ou ouvre celle qui existe déjà)
    */
   async store({ auth, request, response, session }: HttpContext) {
@@ -111,5 +149,22 @@ export default class ConversationsController {
     const conversation = await this.conversations.startPrivate(user, userId)
 
     return response.redirect().toRoute('conversations.show', { id: conversation.id })
+  }
+
+  /**
+   * Quitte une conversation : elle disparaît de la liste de l'utilisateur.
+   */
+  async destroy({ auth, params, response, session }: HttpContext) {
+    const user = auth.getUserOrFail()
+    const conversationId = Number(params.id)
+
+    const conversation = await this.conversations.findForMember(user, conversationId)
+    const notifyUserIds = conversation.members.map((member) => member.userId)
+
+    await this.conversations.leave(user, conversationId)
+    this.realtime.membersChanged(conversation, notifyUserIds)
+
+    session.flash('success', 'La discussion a été supprimée de votre liste.')
+    return response.redirect().toRoute('dashboard')
   }
 }

@@ -1,9 +1,17 @@
 import type Message from '#models/message'
 import ConversationPresenter from '#services/conversation_presenter'
 import ConversationService from '#services/conversation_service'
+import MessageAttachmentService, {
+  MessageAttachmentError,
+} from '#services/message_attachment_service'
 import MessageService, { MessageNotEditableError } from '#services/message_service'
 import RealtimeService from '#services/realtime_service'
-import { catchUpValidator, deleteMessageValidator, sendMessageValidator } from '#validators/message'
+import {
+  catchUpValidator,
+  deleteMessageValidator,
+  editMessageValidator,
+  sendMessageValidator,
+} from '#validators/message'
 import type { HttpContext } from '@adonisjs/core/http'
 
 /**
@@ -72,12 +80,44 @@ export default class MessagesController {
   /**
    * Envoie un message dans une conversation dont l'utilisateur est membre
    */
-  async store({ auth, params, request, response, view }: HttpContext) {
+  async store({ auth, params, request, response, session, view }: HttpContext) {
     const user = auth.getUserOrFail()
     const conversation = await this.conversations.findForMember(user, Number(params.conversationId))
-    const { body } = await request.validateUsing(sendMessageValidator)
+    const payload = await request.validateUsing(sendMessageValidator)
+    const body = payload.body ?? ''
 
-    const { message, startsNewDay } = await this.messages.send(user, conversation, body)
+    let attachments: Awaited<ReturnType<typeof MessageAttachmentService.fromRequest>> = []
+    try {
+      attachments = MessageAttachmentService.fromRequest(request)
+    } catch (error) {
+      if (error instanceof MessageAttachmentError) {
+        if (this.wantsFragment(request)) {
+          return response.status(422).json({ errors: [{ message: error.message }] })
+        }
+
+        session.flash('error', error.message)
+        return response.redirect().toRoute('conversations.show', { id: conversation.id })
+      }
+      throw error
+    }
+
+    if (!body.trim() && attachments.length === 0) {
+      if (this.wantsFragment(request)) {
+        return response.status(422).json({
+          errors: [{ message: 'Écrivez un message ou joignez un fichier.' }],
+        })
+      }
+
+      session.flash('error', 'Écrivez un message ou joignez un fichier.')
+      return response.redirect().toRoute('conversations.show', { id: conversation.id })
+    }
+
+    const { message, startsNewDay } = await this.messages.send(
+      user,
+      conversation,
+      body,
+      attachments
+    )
     await this.conversations.markAsRead(conversation.id, user.id)
     this.realtime.messageCreated(conversation, message)
 
@@ -104,7 +144,7 @@ export default class MessagesController {
   async update({ auth, params, request, response, session, view }: HttpContext) {
     const user = auth.getUserOrFail()
     const conversation = await this.conversations.findForMember(user, Number(params.conversationId))
-    const { body } = await request.validateUsing(sendMessageValidator)
+    const { body } = await request.validateUsing(editMessageValidator)
 
     let message: Message
     try {

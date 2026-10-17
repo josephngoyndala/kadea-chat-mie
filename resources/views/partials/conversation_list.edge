@@ -24,7 +24,6 @@
         @svg('lucide:users-round', { width: 15, height: 15 })
         <span class="hidden sm:inline">Groupe</span>
       </a>
-
       {{-- Bouton Nouvelle discussion (compact pour ne plus jamais déborder sur desktop ni mobile) --}}
       <a
         href="{{ urlFor('users.index') }}"
@@ -37,11 +36,12 @@
       </a>
     </div>
   </div>
-
   {{-- Barre de recherche & filtres style WhatsApp (visible s'il y a des conversations) --}}
   <div class="px-4 pb-2.5 {{ conversations.length ? '' : 'hidden' }}">
     <div class="relative">
-      <span class="pointer-events-none absolute inset-y-0 left-0 grid w-9 place-items-center text-muted">
+      <span
+        class="pointer-events-none absolute inset-y-0 left-0 grid w-9 place-items-center text-muted"
+      >
         @svg('lucide:search', { width: 15, height: 15 })
       </span>
       <input
@@ -61,7 +61,6 @@
         @svg('lucide:x', { width: 14, height: 14 })
       </button>
     </div>
-
     {{-- Filtres rapides style WhatsApp : Toutes, Directes, Groupes --}}
     <div class="mt-2.5 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
       <button
@@ -102,7 +101,6 @@
       </button>
     </div>
   </div>
-
   {{-- Message si aucun résultat après recherche/filtre --}}
   <div
     x-ref="noMatch"
@@ -123,22 +121,25 @@
       @!conversationCard({ ...item, active: item.id === activeId })
     @end
   </ul>
-
   @if(!conversations.length)
-    <div data-list-empty class="flex flex-1 flex-col items-center justify-center gap-4 border-t border-line px-8 text-center">
+    <div
+      data-list-empty
+      class="flex flex-1 flex-col items-center justify-center gap-4 border-t border-line px-8 text-center"
+    >
       <span class="grid size-16 place-items-center rounded-2xl bg-brand-50 text-brand">
         @svg('lucide:messages-square', { width: 28, height: 28 })
       </span>
       <div>
         <h2 class="text-lg font-bold tracking-tight">Aucune discussion</h2>
-        <p class="mt-1 text-sm text-muted">Recherchez un utilisateur pour démarrer votre première conversation, ou créez un groupe.</p>
+        <p class="mt-1 text-sm text-muted">
+          Recherchez un utilisateur pour démarrer votre première conversation, ou créez un groupe.
+        </p>
       </div>
       @button({ route: 'users.index', arrow: true })
         Nouvelle discussion
       @end
     </div>
   @end
-
   {{-- Floating Action Button (FAB) style WhatsApp sur téléphone --}}
   <a
     href="{{ urlFor('users.index') }}"

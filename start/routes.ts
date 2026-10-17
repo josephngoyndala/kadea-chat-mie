@@ -47,6 +47,7 @@ router
 router
   .group(() => {
     router.post('logout', [controllers.Session, 'destroy'])
+    router.post('presence/ping', [controllers.Session, 'ping'])
 
     router.get('dashboard', [controllers.Conversations, 'index']).as('dashboard')
     router
@@ -56,7 +57,16 @@ router
       .get('conversations/:id/card', [controllers.Conversations, 'card'])
       .where('id', router.matchers.number())
     router
+      .post('conversations/:id/delete', [controllers.Conversations, 'destroy'])
+      .where('id', router.matchers.number())
+    router
       .post('conversations/:id/read', [controllers.Conversations, 'read'])
+      .where('id', router.matchers.number())
+    router
+      .post('conversations/:id/typing', [controllers.Conversations, 'typing'])
+      .where('id', router.matchers.number())
+    router
+      .get('conversations/:id/search', [controllers.Conversations, 'search'])
       .where('id', router.matchers.number())
     router.post('conversations', [controllers.Conversations, 'store'])
 
@@ -76,6 +86,15 @@ router
       ])
       .where('conversationId', router.matchers.number())
       .where('userId', router.matchers.number())
+    router
+      .post('conversations/:conversationId/avatar', [controllers.GroupMembers, 'updateAvatar'])
+      .where('conversationId', router.matchers.number())
+    router
+      .post('conversations/:conversationId/avatar/delete', [
+        controllers.GroupMembers,
+        'destroyAvatar',
+      ])
+      .where('conversationId', router.matchers.number())
 
     router
       .get('conversations/:conversationId/messages', [controllers.Messages, 'index'])

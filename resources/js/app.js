@@ -71,11 +71,14 @@ document.addEventListener('click', (event) => {
  * Appel au serveur utilisé par la messagerie : le serveur répond par le
  * morceau de HTML à insérer dans la page.
  */
-function postToServer(form) {
+function postToServer(form, bodyOverride) {
+  const headers = { 'X-Chat-Fetch': '1', 'Accept': 'application/json' }
+  const body = bodyOverride ?? new URLSearchParams(new FormData(form))
+
   return fetch(form.action, {
     method: 'POST',
-    headers: { 'X-Chat-Fetch': '1', Accept: 'application/json' },
-    body: new URLSearchParams(new FormData(form)),
+    headers,
+    body,
   })
 }
 
@@ -153,24 +156,69 @@ Alpine.data('messageBubble', function () {
  */
 Alpine.data('conversationChat', function () {
   return {
+    conversationId: null,
+    userId: null,
+    otherUserId: null,
+    isOnline: false,
+    messageUrlTemplate: '',
+    catchUpUrl: '',
     draft: '',
     sending: false,
     error: '',
     offline: false,
     unseen: 0,
+    typingUser: null,
+    typingTimer: null,
+    lastTypingSent: 0,
+    heartbeatTimer: null,
+    searchOpen: false,
+    searchQuery: '',
+    searchResults: [],
+    currentSearchIndex: -1,
+    originalMessageContents: new Map(),
+    emojiOpen: false,
+    emojiChoices: [
+      '😀',
+      '😂',
+      '😍',
+      '🥰',
+      '😊',
+      '😢',
+      '😡',
+      '👍',
+      '👏',
+      '🙏',
+      '🔥',
+      '❤️',
+      '💯',
+      '🎉',
+      '✅',
+      '🚀',
+    ],
+    pendingFiles: [],
 
     init() {
+      this.conversationId = this.$el.dataset.conversationId
+      this.userId = parseInt(this.$el.dataset.userId || '0', 10)
+      this.otherUserId = this.$el.dataset.otherUserId
+        ? parseInt(this.$el.dataset.otherUserId, 10)
+        : null
+      this.isOnline = this.$el.dataset.isOnline === '1'
+      this.messageUrlTemplate = this.$el.dataset.messageUrl || ''
+      this.catchUpUrl = this.$el.dataset.catchUpUrl || ''
+
       this.$nextTick(() => this.scrollToBottom(false))
       this.listen()
+      this.startHeartbeat()
     },
 
     get canSend() {
-      return this.draft.trim().length > 0 && !this.sending
+      return (this.draft.trim().length > 0 || this.pendingFiles.length > 0) && !this.sending
     },
 
     /**
-     * Abonnement au canal temps réel de la conversation, et suivi de l'état
-     * de la connexion : à la reconnexion, on va chercher les messages manqués.
+     * Abonnement au canal temps réel de la conversation et de présence.
+     * À la reconnexion, on va chercher les messages manqués.
      */
     async listen() {
       const transmit = getTransmit()
@@ -188,18 +236,60 @@ Alpine.data('conversationChat', function () {
         this.offline = true
       })
 
-      const subscription = transmit.subscription(
-        `conversations/${this.$el.dataset.conversationId}`
-      )
-      await subscription.create()
+      // 1. Canal de la conversation (messages et indicateur de saisie)
+      if (this.conversationId) {
+        const conversationSub = transmit.subscription(`conversations/${this.conversationId}`)
+        await conversationSub.create()
 
-      subscription.onMessage((event) => {
-        if (event.type === 'message.created') {
-          this.onCreated(event.messageId)
-        } else if (event.type === 'message.updated') {
-          this.onUpdated(event.messageId)
+        conversationSub.onMessage((event) => {
+          if (event.type === 'message.created') {
+            this.typingUser = null
+            if (this.typingTimer) clearTimeout(this.typingTimer)
+            this.onCreated(event.messageId)
+          } else if (event.type === 'message.updated') {
+            this.onUpdated(event.messageId)
+          } else if (event.type === 'user.typing') {
+            this.onTyping(event)
+          }
+        })
+      }
+
+      // 2. Canal de présence (en ligne / hors ligne)
+      const presenceSub = transmit.subscription('presence')
+      await presenceSub.create()
+
+      presenceSub.onMessage((event) => {
+        if (event.type === 'user.presence') {
+          if (this.otherUserId && event.userId === this.otherUserId) {
+            this.isOnline = Boolean(event.isOnline)
+          }
         }
       })
+    },
+
+    /**
+     * Maintient le statut actif de l'utilisateur sur le serveur.
+     */
+    startHeartbeat() {
+      this.heartbeatTimer = setInterval(() => {
+        this.sendPing()
+      }, 45000)
+
+      window.addEventListener('beforeunload', () => {
+        if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
+      })
+    },
+
+    sendPing() {
+      const csrf = document.querySelector('meta[name="csrf-token"]')?.content
+      if (!csrf) return
+      fetch('/presence/ping', {
+        method: 'POST',
+        headers: {
+          'X-CSRF-TOKEN': csrf,
+          'X-Chat-Fetch': '1',
+        },
+      }).catch(() => {})
     },
 
     /**
@@ -207,7 +297,10 @@ Alpine.data('conversationChat', function () {
      * termine par /0, que l'on remplace par l'identifiant.
      */
     messageUrl(messageId) {
-      return this.$el.dataset.messageUrl.replace(/\/0$/, `/${messageId}`)
+      return (this.messageUrlTemplate || this.$el.dataset.messageUrl || '').replace(
+        /\/0$/,
+        `/${messageId}`
+      )
     },
 
     /**
@@ -260,9 +353,10 @@ Alpine.data('conversationChat', function () {
     async catchUp() {
       const bubbles = this.$refs.messages.querySelectorAll('[data-message-id]')
       const lastId = bubbles.length > 0 ? bubbles[bubbles.length - 1].dataset.messageId : 0
+      const url = this.catchUpUrl || this.$el.dataset.catchUpUrl
 
       try {
-        const response = await fetch(`${this.$el.dataset.catchUpUrl}?after=${lastId}`, {
+        const response = await fetch(`${url}?after=${lastId}`, {
           headers: { 'X-Chat-Fetch': '1' },
         })
         if (response.ok) {
@@ -295,14 +389,274 @@ Alpine.data('conversationChat', function () {
 
     markAsRead() {
       const csrf = document.querySelector('meta[name="csrf-token"]')?.content
-      if (!csrf) return
-      fetch(`/conversations/${this.$el.dataset.conversationId}/read`, {
+      const convId = this.conversationId || this.$el.dataset.conversationId
+      if (!csrf || !convId) return
+      fetch(`/conversations/${convId}/read`, {
         method: 'POST',
         headers: {
           'X-CSRF-TOKEN': csrf,
           'X-Chat-Fetch': '1',
         },
       }).catch(() => {})
+    },
+
+    onTyping(event) {
+      if (event.userId === this.userId) {
+        return
+      }
+
+      this.typingUser = event.userName
+      if (this.typingTimer) {
+        clearTimeout(this.typingTimer)
+      }
+
+      if (this.isNearBottom()) {
+        this.$nextTick(() => this.scrollToBottom())
+      }
+
+      this.typingTimer = setTimeout(() => {
+        this.typingUser = null
+      }, 3500)
+    },
+
+    onInput() {
+      this.autosize()
+      const now = Date.now()
+      if (now - this.lastTypingSent > 2000) {
+        this.lastTypingSent = now
+        this.sendTypingSignal()
+      }
+    },
+
+    insertEmoji(emoji) {
+      this.draft += emoji
+      this.emojiOpen = false
+      this.$nextTick(() => {
+        this.onInput()
+        this.$refs.field?.focus()
+      })
+    },
+
+    onFilesSelected(event) {
+      const picked = [...(event.target.files ?? [])]
+      event.target.value = ''
+      this.error = ''
+
+      const allowed = /\.(jpe?g|png|webp|gif|mp4|webm|mov|pdf|txt|zip)$/i
+
+      for (const file of picked) {
+        if (this.pendingFiles.length >= 5) {
+          this.error = 'Vous ne pouvez pas envoyer plus de 5 fichiers à la fois.'
+          break
+        }
+
+        if (file.size > 20 * 1024 * 1024) {
+          this.error = 'Un fichier dépasse la taille maximale de 20 Mo.'
+          continue
+        }
+
+        if (!allowed.test(file.name)) {
+          this.error =
+            'Format non accepté. Images, vidéos (MP4, WebM, MOV), PDF, TXT ou ZIP uniquement.'
+          continue
+        }
+
+        const key = `${file.name}-${file.size}-${file.lastModified}`
+        let kind = 'file'
+        let preview = null
+
+        if (file.type.startsWith('image/')) {
+          kind = 'image'
+          preview = URL.createObjectURL(file)
+        } else if (file.type.startsWith('video/')) {
+          kind = 'video'
+          preview = URL.createObjectURL(file)
+        }
+
+        this.pendingFiles.push({ key, file, name: file.name, preview, kind })
+      }
+    },
+
+    removePendingFile(index) {
+      const item = this.pendingFiles[index]
+      if (item?.preview) {
+        URL.revokeObjectURL(item.preview)
+      }
+      this.pendingFiles.splice(index, 1)
+    },
+
+    clearPendingFiles() {
+      for (const item of this.pendingFiles) {
+        if (item.preview) {
+          URL.revokeObjectURL(item.preview)
+        }
+      }
+      this.pendingFiles = []
+    },
+
+    csrfFromForm(form) {
+      return form.querySelector('input[name="_csrf"]')?.value ?? ''
+    },
+
+    buildSendFormData(form) {
+      const formData = new FormData()
+      const csrf = this.csrfFromForm(form)
+      if (csrf) {
+        formData.append('_csrf', csrf)
+      }
+      formData.append('body', this.draft.trim())
+
+      for (const item of this.pendingFiles) {
+        formData.append('attachments[]', item.file, item.file.name)
+      }
+
+      return formData
+    },
+
+    buildTextPayload(form) {
+      const params = new URLSearchParams()
+      const csrf = this.csrfFromForm(form)
+      if (csrf) {
+        params.append('_csrf', csrf)
+      }
+      params.append('body', this.draft.trim())
+      return params
+    },
+
+    sendTypingSignal() {
+      const csrf = document.querySelector('meta[name="csrf-token"]')?.content
+      const convId = this.conversationId || this.$el.dataset.conversationId
+      if (!csrf || !convId) return
+      fetch(`/conversations/${convId}/typing`, {
+        method: 'POST',
+        headers: {
+          'X-CSRF-TOKEN': csrf,
+          'X-Chat-Fetch': '1',
+        },
+      }).catch(() => {})
+    },
+
+    toggleSearch() {
+      this.searchOpen = !this.searchOpen
+      if (this.searchOpen) {
+        this.$nextTick(() => {
+          this.$refs.searchInput?.focus()
+        })
+      } else {
+        this.closeSearch()
+      }
+    },
+
+    closeSearch() {
+      this.searchOpen = false
+      this.searchQuery = ''
+      this.clearSearchHighlights()
+      this.searchResults = []
+      this.currentSearchIndex = -1
+    },
+
+    clearSearchHighlights() {
+      for (const [el, originalText] of this.originalMessageContents.entries()) {
+        if (el && document.body.contains(el)) {
+          el.textContent = originalText
+        }
+      }
+      this.originalMessageContents.clear()
+      document.querySelectorAll('[data-search-target]').forEach((el) => {
+        el.classList.remove('ring-4', 'ring-brand/40', 'bg-brand-50/50')
+        el.removeAttribute('data-search-target')
+      })
+    },
+
+    performSearch() {
+      this.clearSearchHighlights()
+      const q = this.searchQuery.trim().toLowerCase()
+      if (!q) {
+        this.searchResults = []
+        this.currentSearchIndex = -1
+        return
+      }
+
+      const messageNodes = this.$refs.messages.querySelectorAll('[data-message-id]')
+      const matches = []
+
+      messageNodes.forEach((bubble) => {
+        const textNode = bubble.querySelector('[data-message-body]')
+        if (!textNode) return
+
+        const rawText = textNode.textContent
+        const lowerText = rawText.toLowerCase()
+
+        if (lowerText.includes(q)) {
+          if (!this.originalMessageContents.has(textNode)) {
+            this.originalMessageContents.set(textNode, rawText)
+          }
+
+          const regex = new RegExp(`(${this.escapeRegex(q)})`, 'gi')
+          textNode.innerHTML = this.escapeHtml(rawText).replace(
+            regex,
+            '<mark class="bg-amber-200 text-ink rounded px-0.5 font-semibold">$1</mark>'
+          )
+
+          matches.push(bubble)
+        }
+      })
+
+      this.searchResults = matches
+      if (matches.length > 0) {
+        this.currentSearchIndex = matches.length - 1
+        this.highlightCurrentMatch()
+      } else {
+        this.currentSearchIndex = -1
+      }
+    },
+
+    nextSearchResult() {
+      if (this.searchResults.length === 0) return
+      this.currentSearchIndex = (this.currentSearchIndex + 1) % this.searchResults.length
+      this.highlightCurrentMatch()
+    },
+
+    prevSearchResult() {
+      if (this.searchResults.length === 0) return
+      this.currentSearchIndex =
+        (this.currentSearchIndex - 1 + this.searchResults.length) % this.searchResults.length
+      this.highlightCurrentMatch()
+    },
+
+    highlightCurrentMatch() {
+      document.querySelectorAll('[data-search-target]').forEach((el) => {
+        el.classList.remove('ring-4', 'ring-brand/40', 'bg-brand-50/50')
+        el.removeAttribute('data-search-target')
+      })
+
+      const target = this.searchResults[this.currentSearchIndex]
+      if (!target) return
+
+      target.setAttribute('data-search-target', '1')
+      target.classList.add(
+        'ring-4',
+        'ring-brand/40',
+        'bg-brand-50/50',
+        'transition-all',
+        'duration-300',
+        'rounded-2xl'
+      )
+
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    },
+
+    escapeHtml(str) {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;')
+    },
+
+    escapeRegex(str) {
+      return str.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')
     },
 
     /**
@@ -388,13 +742,21 @@ Alpine.data('conversationChat', function () {
 
       this.sending = true
       this.error = ''
+      this.typingUser = null
+      if (this.typingTimer) clearTimeout(this.typingTimer)
 
       try {
-        const response = await postToServer(event.target)
+        const form = event.target
+        const payload =
+          this.pendingFiles.length > 0
+            ? this.buildSendFormData(form)
+            : this.buildTextPayload(form)
+        const response = await postToServer(form, payload)
 
         if (response.status === 201) {
           this.insertHtml(await response.text())
           this.draft = ''
+          this.clearPendingFiles()
           this.$nextTick(() => {
             this.autosize()
             this.scrollToBottom()

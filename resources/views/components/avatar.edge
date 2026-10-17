@@ -8,9 +8,11 @@
   light: 'bg-[#e4e4e4] text-ink',
   dark: 'bg-ink text-white',
 })
-@let(classes = ['grid shrink-0 place-items-center rounded-full object-cover font-bold', tones[$props.get('tone', 'brand')]])
+@let(classes = [
+  'grid shrink-0 place-items-center rounded-full object-cover font-bold',
+  tones[$props.get('tone', 'brand')],
+])
 @let(boxStyle = `width: ${size}px; height: ${size}px; font-size: ${Math.round(size * 0.36)}px;`)
-
 @if(photo && zoom)
   <button
     type="button"

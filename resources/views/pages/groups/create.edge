@@ -1,7 +1,8 @@
 @layouts.app({ title: 'Nouveau groupe' })
   @page({
     title: 'Nouveau groupe',
-    description: 'Donnez un nom au groupe et choisissez ses membres. Vous en serez l\'administrateur.',
+    description:
+      "Donnez un nom au groupe et choisissez ses membres. Vous en serez l'administrateur.",
   })
     @form({
       route: 'groups.store',
@@ -21,16 +22,20 @@
         })
         @!field.error()
       @end
-
       @field.root({ name: 'memberIds' })
         <div class="flex flex-col gap-3">
           <div class="flex items-center justify-between gap-3">
             <span class="text-sm font-semibold text-ink">Membres</span>
-            <span class="text-sm text-muted" x-text="selected.length + (selected.length > 1 ? ' sélectionnés' : ' sélectionné')"></span>
+            <span
+              class="text-sm text-muted"
+              x-text="selected.length + (selected.length > 1 ? ' sélectionnés' : ' sélectionné')"
+            ></span>
           </div>
 
           <div class="relative">
-            <span class="pointer-events-none absolute inset-y-0 left-0 grid w-12 place-items-center text-muted">
+            <span
+              class="pointer-events-none absolute inset-y-0 left-0 grid w-12 place-items-center text-muted"
+            >
               @svg('lucide:search', { width: 20, height: 20 })
             </span>
             <input
@@ -42,9 +47,10 @@
               class="h-14 w-full min-w-0 rounded-field border border-line bg-white pl-12 pr-4 text-[15px] outline-none transition placeholder:text-[#8d8d8d] focus:border-brand focus:ring-4 focus:ring-brand/15"
             />
           </div>
-
           @if(members.length)
-            <ul class="max-h-[50dvh] divide-y divide-line overflow-y-auto rounded-3xl border border-line bg-white shadow-card">
+            <ul
+              class="max-h-[50dvh] divide-y divide-line overflow-y-auto rounded-3xl border border-line bg-white shadow-card"
+            >
               @each(person in members)
                 <li
                   data-search="{{ person.searchText }}"
@@ -59,10 +65,14 @@
                     @end
                   </div>
 
-                  <label class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 after:absolute after:inset-0">
+                  <label
+                    class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 after:absolute after:inset-0"
+                  >
                     <span class="min-w-0 flex-1">
                       <span class="block truncate text-[15px] font-bold">{{ person.name }}</span>
-                      <span class="block truncate text-xs text-muted">{{ person.maskedEmail }}</span>
+                      <span class="block truncate text-xs text-muted">
+                        {{ person.maskedEmail }}
+                      </span>
                     </span>
                     <input
                       type="checkbox"
@@ -76,16 +86,21 @@
               @end
             </ul>
           @else
-            <p class="rounded-3xl border border-line bg-white px-6 py-10 text-center text-sm text-muted shadow-card">
+            <p
+              class="rounded-3xl border border-line bg-white px-6 py-10 text-center text-sm text-muted shadow-card"
+            >
               Aucun autre membre confirmé pour l'instant. Invitez vos camarades à créer leur compte !
             </p>
           @end
-
           @!field.error()
         </div>
       @end
-
-      @button({ type: 'submit', block: true, arrow: true, 'x-bind:disabled': '!canSubmit' })
+      @button({
+        type: 'submit',
+        block: true,
+        arrow: true,
+        'x-bind:disabled': '!canSubmit',
+      })
         Créer le groupe
       @end
     @end
