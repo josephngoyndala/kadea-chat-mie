@@ -3,6 +3,7 @@ import type ConversationMember from '#models/conversation_member'
 import type Message from '#models/message'
 import type User from '#models/user'
 import AvatarService from '#services/avatar_service'
+import BlockService from '#services/block_service'
 import type { ConversationWithLastMessage } from '#services/conversation_service'
 import { dayKey, formatDayLabel, formatListDate, formatMessageTime } from '#services/date_formatter'
 import { isWithinEditWindow } from '#services/message_rules'
@@ -82,6 +83,7 @@ export type GroupMemberView = {
  */
 export default class ConversationPresenter {
   private avatars = new AvatarService()
+  private blocks = new BlockService()
 
   /**
    * Indique si les messages d'une conversation doivent afficher leur auteur.
@@ -94,9 +96,11 @@ export default class ConversationPresenter {
    * Cartes de la liste des conversations.
    */
   async cards(items: ConversationWithLastMessage[], viewer: User): Promise<ConversationCard[]> {
+    const blockers = await this.blocks.blockerIdsOf(viewer)
+
     return Promise.all(
       items.map(async ({ conversation, lastMessage, unreadCount }) => {
-        const identity = await this.identity(conversation, viewer)
+        const identity = await this.identity(conversation, viewer, blockers)
 
         return {
           id: conversation.id,
@@ -119,11 +123,16 @@ export default class ConversationPresenter {
       ? conversation.members.find((member) => member.userId !== viewer.id)
       : null
 
+    const blockers = await this.blocks.blockerIdsOf(viewer)
+
+    /**
+     * Un utilisateur bloqué ne voit plus si l'autre est en ligne.
+     */
     const otherUser = otherMember?.user
-    const isOnline = otherUser ? isUserOnline(otherUser) : false
+    const isOnline = otherUser && !blockers.has(otherUser.id) ? isUserOnline(otherUser) : false
 
     return {
-      ...(await this.identity(conversation, viewer)),
+      ...(await this.identity(conversation, viewer, blockers)),
       isGroup,
       memberCount: conversation.members.length,
       otherUserId: otherUser?.id ?? null,
@@ -244,6 +253,14 @@ export default class ConversationPresenter {
    * tous les autres membres l'aient reçu (ou lu) pour que le statut avance.
    */
   private statusOf(message: Message, members: ConversationMember[]): MessageStatus {
+    /**
+     * Un message envoyé à quelqu'un qui a bloqué son auteur n'est jamais remis :
+     * il reste à un seul trait, même si le destinataire est en ligne.
+     */
+    if (message.silencedAt) {
+      return 'sent'
+    }
+
     const recipients = members.filter((member) => member.userId !== message.senderId)
     if (recipients.length === 0) {
       return 'sent'
@@ -267,7 +284,7 @@ export default class ConversationPresenter {
    * Nom, initiales et photo à afficher pour une conversation : l'autre
    * participant pour une conversation privée, le groupe sinon.
    */
-  private async identity(conversation: Conversation, viewer: User) {
+  private async identity(conversation: Conversation, viewer: User, blockers: Set<number>) {
     if (conversation.type === 'group') {
       const title = conversation.name ?? 'Groupe'
       return {
@@ -282,10 +299,14 @@ export default class ConversationPresenter {
       return { title: 'Utilisateur introuvable', initials: '?', avatarUrl: null }
     }
 
+    /**
+     * Un utilisateur bloqué ne voit plus la photo de celui qui l'a bloqué :
+     * ses initiales s'affichent à la place, sans rien lui signaler.
+     */
     return {
       title: other.fullName ?? other.email,
       initials: other.initials,
-      avatarUrl: await this.avatars.urlFor(other),
+      avatarUrl: blockers.has(other.id) ? null : await this.avatars.urlFor(other),
     }
   }
 

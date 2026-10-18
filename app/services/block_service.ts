@@ -17,6 +17,11 @@ export type BlockState = {
 /**
  * Règles métier du blocage : bloquer, débloquer, et savoir si deux
  * utilisateurs peuvent encore s'écrire.
+ *
+ * Comme sur WhatsApp, le blocage est silencieux pour l'utilisateur bloqué :
+ * il peut toujours écrire, mais ses messages ne sont jamais remis (un seul
+ * trait), il ne voit plus la photo ni la présence de celui qui l'a bloqué, et
+ * celui-ci ne voit pas qu'il est en train d'écrire.
  */
 export default class BlockService {
   /**
@@ -71,28 +76,79 @@ export default class BlockService {
   }
 
   /**
-   * Message d'erreur à afficher si l'utilisateur ne peut plus écrire dans
-   * cette conversation à cause d'un blocage, ou null s'il le peut. Seules les
-   * conversations privées sont concernées (les membres doivent être chargés).
+   * Identifiants des utilisateurs qui ont bloqué cet utilisateur : il ne voit
+   * plus leur photo ni leur présence.
+   */
+  async blockerIdsOf(user: User) {
+    const blocks = await UserBlock.query().where('blocked_id', user.id)
+
+    return new Set(blocks.map((block) => block.blockerId))
+  }
+
+  /**
+   * Message d'erreur à afficher si l'utilisateur a lui-même bloqué l'autre
+   * participant de la conversation (il doit d'abord le débloquer pour lui
+   * écrire), ou null s'il peut écrire. Seules les conversations privées sont
+   * concernées (les membres doivent être chargés).
+   *
+   * L'utilisateur bloqué, lui, ne reçoit jamais d'erreur : voir
+   * silentRecipientFor.
    */
   async restrictionFor(user: User, conversation: Conversation) {
-    if (conversation.type !== 'private') {
-      return null
-    }
-
-    const other = conversation.members.find((member) => member.userId !== user.id)
+    const other = this.otherMemberOf(user, conversation)
     if (!other) {
       return null
     }
 
-    const state = await this.stateBetween(user.id, other.userId)
+    const state = await this.stateBetween(user.id, other)
     if (state.byMe) {
       return 'Vous avez bloqué cet utilisateur. Débloquez-le pour lui écrire.'
     }
-    if (state.byThem) {
-      return 'Vous ne pouvez pas envoyer de message à cet utilisateur.'
-    }
 
     return null
+  }
+
+  /**
+   * Si l'autre participant d'une conversation privée a bloqué l'utilisateur,
+   * renvoie son identifiant : le message de l'utilisateur sera enregistré
+   * mais jamais remis à ce destinataire. Sinon null.
+   */
+  async silentRecipientFor(user: User, conversation: Conversation) {
+    const other = this.otherMemberOf(user, conversation)
+    if (!other) {
+      return null
+    }
+
+    const state = await this.stateBetween(user.id, other)
+
+    return state.byThem && !state.byMe ? other : null
+  }
+
+  /**
+   * Indique si un blocage existe, dans un sens ou dans l'autre, entre
+   * l'utilisateur et l'autre participant d'une conversation privée. Sert à ne
+   * pas diffuser le signal « en train d'écrire ».
+   */
+  async isBlockedInConversation(user: User, conversation: Conversation) {
+    const other = this.otherMemberOf(user, conversation)
+    if (!other) {
+      return false
+    }
+
+    const state = await this.stateBetween(user.id, other)
+
+    return state.byMe || state.byThem
+  }
+
+  /**
+   * L'autre participant d'une conversation privée (les membres doivent être
+   * chargés), ou null pour un groupe.
+   */
+  private otherMemberOf(user: User, conversation: Conversation) {
+    if (conversation.type !== 'private') {
+      return null
+    }
+
+    return conversation.members.find((member) => member.userId !== user.id)?.userId ?? null
   }
 }

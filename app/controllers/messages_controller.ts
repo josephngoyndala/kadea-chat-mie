@@ -90,8 +90,8 @@ export default class MessagesController {
     const conversation = await this.conversations.findForMember(user, Number(params.conversationId))
 
     /**
-     * Un blocage, dans un sens ou dans l'autre, empêche d'envoyer un message
-     * dans une conversation privée.
+     * Celui qui a bloqué l'autre doit d'abord le débloquer pour lui écrire.
+     * L'utilisateur bloqué, lui, ne reçoit aucune erreur (voir plus bas).
      */
     const restriction = await this.blocks.restrictionFor(user, conversation)
     if (restriction) {
@@ -132,22 +132,32 @@ export default class MessagesController {
       return response.redirect().toRoute('conversations.show', { id: conversation.id })
     }
 
+    /**
+     * Si le destinataire a bloqué l'utilisateur, le message est enregistré
+     * comme d'habitude, mais jamais remis : l'auteur ne voit aucune erreur et
+     * son message reste à un seul trait.
+     */
+    const silencedFor = await this.blocks.silentRecipientFor(user, conversation)
+
     const { message, startsNewDay } = await this.messages.send(
       user,
       conversation,
       body,
-      attachments
+      attachments,
+      silencedFor
     )
 
     /**
      * Les membres déjà en ligne reçoivent le message tout de suite : il
      * passe à « reçu » (deux traits gris). Les autres le recevront à leur
-     * prochaine connexion.
+     * prochaine connexion. Un message silencieux n'est jamais remis.
      */
-    const onlineRecipientIds = conversation.members
-      .filter((member) => member.userId !== user.id && isUserOnline(member.user))
-      .map((member) => member.userId)
-    await this.conversations.markDeliveredFor(conversation.id, onlineRecipientIds, message.id)
+    if (!silencedFor) {
+      const onlineRecipientIds = conversation.members
+        .filter((member) => member.userId !== user.id && isUserOnline(member.user))
+        .map((member) => member.userId)
+      await this.conversations.markDeliveredFor(conversation.id, onlineRecipientIds, message.id)
+    }
 
     /**
      * Répondre dans une conversation, c'est avoir lu ce qui précède : les
@@ -163,7 +173,15 @@ export default class MessagesController {
       members.preload('user')
     })
 
-    this.realtime.messageCreated(conversation, message)
+    if (silencedFor) {
+      /**
+       * Seule la liste de l'auteur est rafraîchie : le destinataire n'est
+       * prévenu de rien.
+       */
+      this.realtime.conversationUpdatedForUser(conversation.id, user.id)
+    } else {
+      this.realtime.messageCreated(conversation, message)
+    }
     this.realtime.statusChanged(conversation.id, readIds)
 
     if (!this.wantsFragment(request)) {
@@ -207,7 +225,9 @@ export default class MessagesController {
       throw error
     }
 
-    this.realtime.messageUpdated(conversation, message)
+    if (!message.silencedAt) {
+      this.realtime.messageUpdated(conversation, message)
+    }
 
     if (!this.wantsFragment(request)) {
       return response.redirect().toRoute('conversations.show', { id: conversation.id })
@@ -247,7 +267,9 @@ export default class MessagesController {
     }
 
     const message = await this.messages.deleteForEveryone(user, conversation.id, messageId)
-    this.realtime.messageUpdated(conversation, message)
+    if (!message.silencedAt) {
+      this.realtime.messageUpdated(conversation, message)
+    }
 
     if (!this.wantsFragment(request)) {
       return response.redirect().toRoute('conversations.show', { id: conversation.id })

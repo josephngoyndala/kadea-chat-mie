@@ -88,6 +88,18 @@ export default class RealtimeService {
   }
 
   /**
+   * Rafraîchit la carte de la conversation chez un seul utilisateur : sert
+   * pour un message envoyé à quelqu'un qui a bloqué l'auteur. Le destinataire
+   * n'est pas prévenu.
+   */
+  conversationUpdatedForUser(conversationId: number, userId: number) {
+    transmit.broadcast(`users/${userId}`, {
+      type: 'conversation.updated',
+      conversationId,
+    })
+  }
+
+  /**
    * Prévient les membres du groupe, ainsi que des utilisateurs en plus
    * (ajoutés ou retirés), de rafraîchir leur liste. Pour un utilisateur
    * retiré, la carte demandée est introuvable : sa liste la retire.

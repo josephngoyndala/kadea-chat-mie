@@ -138,7 +138,16 @@ export default class ConversationsController {
       return response.forbidden()
     }
 
-    this.realtime.userTyping(conversationId, user)
+    /**
+     * Entre deux utilisateurs dont l'un a bloqué l'autre, le signal n'est pas
+     * diffusé : celui qui a bloqué ne voit pas l'autre écrire, et rien ne
+     * signale à l'autre qu'il est bloqué (la réponse reste la même).
+     */
+    const conversation = await this.conversations.findForMember(user, conversationId)
+    const isBlocked = await this.blocks.isBlockedInConversation(user, conversation)
+    if (!isBlocked) {
+      this.realtime.userTyping(conversationId, user)
+    }
 
     return response.noContent()
   }
@@ -177,16 +186,11 @@ export default class ConversationsController {
       return response.redirect().toRoute('users.index')
     }
 
-    const blockState = await this.blocks.stateBetween(user.id, userId)
-    if (blockState.byMe) {
-      session.flash('error', 'Vous avez bloqué cet utilisateur. Débloquez-le depuis votre profil.')
-      return response.redirect().toRoute('users.index')
-    }
-    if (blockState.byThem) {
-      session.flash('error', 'Vous ne pouvez pas démarrer une discussion avec cet utilisateur.')
-      return response.redirect().toRoute('users.index')
-    }
-
+    /**
+     * Même bloqué, l'utilisateur peut ouvrir la discussion, sans erreur ni
+     * indication : ses messages ne seront simplement jamais remis. Celui qui a
+     * bloqué voit, lui, la bannière « Vous avez bloqué… » dans la discussion.
+     */
     const conversation = await this.conversations.startPrivate(user, userId)
 
     return response.redirect().toRoute('conversations.show', { id: conversation.id })

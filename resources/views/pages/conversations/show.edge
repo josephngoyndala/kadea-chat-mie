@@ -13,7 +13,7 @@
       x-on:submit="handleSubmit($event)"
       data-user-id="{{ auth?.user?.id }}"
       data-conversation-id="{{ activeId }}"
-      data-other-user-id="{{ header.otherUserId ?? '' }}"
+      data-other-user-id="{{ blocks.byThem ? '' : (header.otherUserId ?? '') }}"
       data-is-online="{{ header.isOnline ? '1' : '0' }}"
       data-message-url="{{ urlFor('messages.show', { conversationId: activeId, messageId: '0' }) }}"
       data-catch-up-url="{{ urlFor('messages.index', { conversationId: activeId }) }}"
@@ -65,20 +65,23 @@
             </a>
           @else
             <h1 class="truncate text-base font-bold tracking-tight">{{ header.title }}</h1>
-            <p
-              x-show="!typingUser && isOnline"
-              class="truncate text-xs text-emerald-600 flex items-center gap-1.5 font-semibold"
-            >
-              <span class="size-2 rounded-full bg-emerald-500 shadow-sm animate-pulse"></span>
-              <span>En ligne</span>
-            </p>
-            <p
-              x-show="!typingUser && !isOnline"
-              class="truncate text-xs text-muted flex items-center gap-1.5 font-medium"
-            >
-              <span class="size-2 rounded-full bg-zinc-300"></span>
-              <span>Hors ligne</span>
-            </p>
+            {{-- Un utilisateur bloqué ne voit plus la présence de celui qui l'a bloqué --}}
+            @if(!blocks.byThem)
+              <p
+                x-show="!typingUser && isOnline"
+                class="truncate text-xs text-emerald-600 flex items-center gap-1.5 font-semibold"
+              >
+                <span class="size-2 rounded-full bg-emerald-500 shadow-sm animate-pulse"></span>
+                <span>En ligne</span>
+              </p>
+              <p
+                x-show="!typingUser && !isOnline"
+                class="truncate text-xs text-muted flex items-center gap-1.5 font-medium"
+              >
+                <span class="size-2 rounded-full bg-zinc-300"></span>
+                <span>Hors ligne</span>
+              </p>
+            @end
             <p
               x-show="typingUser"
               x-cloak
@@ -400,16 +403,9 @@
               @end
             @end
           </div>
-        @elseif(blocks.byThem)
-          <div
-            class="flex items-center gap-2 bg-paper px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-sm font-medium text-muted"
-          >
-            @svg('lucide:ban', { width: 16, height: 16, class: 'flex-none' })
-            <span>Vous ne pouvez plus envoyer de messages à cet utilisateur.</span>
-          </div>
         @end
-        {{-- La saisie reste dans la page (le JavaScript en a besoin), mais cachée si bloqué --}}
-        <div class="{{ blocks.byMe || blocks.byThem ? 'hidden' : '' }}">
+        {{-- La saisie reste dans la page (le JavaScript en a besoin), mais cachée si on a bloqué l'autre. Un utilisateur bloqué, lui, ne voit rien de différent. --}}
+        <div class="{{ blocks.byMe ? 'hidden' : '' }}">
         {{-- Aperçu des fichiers avant envoi --}}
         <div
           x-show="pendingFiles.length > 0"

@@ -455,6 +455,7 @@ export default class ConversationService {
       .where('conversation_id', conversationId)
       .where('sender_id', '!=', readerId)
       .whereNull('deleted_at')
+      .whereNull('silenced_at')
       .where('id', '>', afterId)
       .where('id', '<=', upToId)
       .orderBy('id', 'desc')
