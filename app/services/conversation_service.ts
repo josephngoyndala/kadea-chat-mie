@@ -17,6 +17,12 @@ export type ConversationWithLastMessage = {
 const HISTORY_LIMIT = 100
 
 /**
+ * Messages chargés avant et après un message retrouvé par la recherche.
+ */
+const CONTEXT_BEFORE = 30
+const CONTEXT_AFTER = 200
+
+/**
  * Nombre maximum de messages dont on annonce le changement de statut
  * (reçu / lu) en une seule fois.
  */
@@ -120,6 +126,44 @@ export default class ConversationService {
       .limit(HISTORY_LIMIT)
 
     return messages.reverse()
+  }
+
+  /**
+   * Historique centré sur un message précis (résultat de recherche) : quelques
+   * messages avant lui, lui-même, puis ceux qui suivent. Renvoie null si le
+   * message n'existe pas dans cette conversation ou est masqué pour
+   * l'utilisateur : la page affiche alors l'historique habituel.
+   */
+  async historyAround(conversation: Conversation, viewer: User, messageId: number) {
+    const target = await Message.query()
+      .where('id', messageId)
+      .where('conversation_id', conversation.id)
+      .whereRaw(NOT_HIDDEN_FOR_USER, [viewer.id])
+      .first()
+    if (!target) {
+      return null
+    }
+
+    const [before, after] = await Promise.all([
+      Message.query()
+        .where('conversation_id', conversation.id)
+        .where('id', '<', target.id)
+        .whereRaw(NOT_HIDDEN_FOR_USER, [viewer.id])
+        .preload('sender')
+        .preload('attachments')
+        .orderBy('id', 'desc')
+        .limit(CONTEXT_BEFORE),
+      Message.query()
+        .where('conversation_id', conversation.id)
+        .where('id', '>=', target.id)
+        .whereRaw(NOT_HIDDEN_FOR_USER, [viewer.id])
+        .preload('sender')
+        .preload('attachments')
+        .orderBy('id', 'asc')
+        .limit(CONTEXT_AFTER),
+    ])
+
+    return [...before.reverse(), ...after]
   }
 
   /**

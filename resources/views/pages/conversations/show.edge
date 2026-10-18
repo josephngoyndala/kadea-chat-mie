@@ -542,5 +542,43 @@
       </div>
     </section>
   </div>
+
+  {{-- Venue d'un résultat de recherche : défile jusqu'au message et le surligne --}}
+  @if(focusId)
+    <script>
+      ;(() => {
+        const focusMessage = (highlight) => {
+          const element = document.getElementById('message-{{ focusId }}')
+          if (!element) {
+            return
+          }
+          /* On fait défiler uniquement la liste des messages (jamais la page entière,
+             sinon la zone de saisie remonte), avec le message au tiers de la hauteur. */
+          const list = element.closest('.overflow-y-auto')
+          if (list) {
+            const offset =
+              element.getBoundingClientRect().top - list.getBoundingClientRect().top
+            list.scrollTop += offset - list.clientHeight * 0.3
+          }
+          window.scrollTo(0, 0)
+          if (highlight) {
+            element.style.borderRadius = '1rem'
+            element.animate(
+              [{ backgroundColor: 'rgba(250, 204, 21, 0.45)' }, { backgroundColor: 'rgba(250, 204, 21, 0)' }],
+              { duration: 2600, easing: 'ease-out' }
+            )
+          }
+        }
+
+        /* Le script de la discussion descend en bas de page au démarrage : on revient au message juste après. */
+        setTimeout(() => focusMessage(false), 0)
+        setTimeout(() => focusMessage(false), 200)
+        setTimeout(() => focusMessage(true), 450)
+
+        /* Un rechargement de la page rouvre la discussion normalement. */
+        history.replaceState(null, '', window.location.pathname)
+      })()
+    </script>
+  @end
 @end
 

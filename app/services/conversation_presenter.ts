@@ -7,6 +7,7 @@ import BlockService from '#services/block_service'
 import type { ConversationWithLastMessage } from '#services/conversation_service'
 import { dayKey, formatDayLabel, formatListDate, formatMessageTime } from '#services/date_formatter'
 import { isWithinEditWindow } from '#services/message_rules'
+import type { MessageHit } from '#services/message_search_service'
 import { isUserOnline } from '#services/presence'
 
 export type ConversationCard = {
@@ -28,6 +29,20 @@ export type ConversationHeader = {
   memberCount: number
   otherUserId: number | null
   isOnline: boolean
+}
+
+export type MessageSearchResult = {
+  messageId: number
+  conversationId: number
+  title: string
+  initials: string
+  avatarUrl: string | null
+  isGroup: boolean
+  author: string | null
+  time: string
+  before: string
+  match: string
+  after: string
 }
 
 export type MessageAttachmentView = {
@@ -109,6 +124,43 @@ export default class ConversationPresenter {
           time: lastMessage ? formatListDate(lastMessage.createdAt) : '',
           isGroup: conversation.type === 'group',
           unreadCount: unreadCount ?? 0,
+        }
+      })
+    )
+  }
+
+  /**
+   * Résultats de la recherche d'un mot dans les messages : la conversation
+   * d'origine (nom et photo), l'auteur, l'heure et un extrait du message où le
+   * mot trouvé est isolé pour être mis en évidence.
+   */
+  async searchResults(
+    hits: MessageHit[],
+    viewer: User,
+    term: string
+  ): Promise<MessageSearchResult[]> {
+    const blockers = await this.blocks.blockerIdsOf(viewer)
+
+    return Promise.all(
+      hits.map(async ({ message, conversation }) => {
+        const identity = await this.identity(conversation, viewer, blockers)
+        const isGroup = conversation.type === 'group'
+
+        let author: string | null = null
+        if (message.senderId === viewer.id) {
+          author = 'Vous'
+        } else if (isGroup) {
+          author = message.sender?.fullName?.split(' ')[0] ?? 'Membre'
+        }
+
+        return {
+          messageId: message.id,
+          conversationId: conversation.id,
+          ...identity,
+          isGroup,
+          author,
+          time: formatListDate(message.createdAt),
+          ...this.excerptOf(message.body ?? '', term),
         }
       })
     )
@@ -345,6 +397,31 @@ export default class ConversationPresenter {
       return `${firstName} : ${clipped}`
     }
     return clipped
+  }
+
+  /**
+   * Court extrait du message autour du mot cherché, découpé en trois parties
+   * (avant, mot trouvé, après) pour que la vue puisse surligner le mot sans
+   * insérer de HTML.
+   */
+  private excerptOf(body: string, term: string) {
+    const text = body.replace(/\s+/g, ' ').trim()
+    const escaped = term.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const found = escaped ? new RegExp(escaped, 'i').exec(text) : null
+
+    if (!found) {
+      return { before: text.slice(0, 80), match: '', after: '' }
+    }
+
+    const start = Math.max(0, found.index - 30)
+    const matchEnd = found.index + found[0].length
+    const end = Math.min(text.length, matchEnd + 50)
+
+    return {
+      before: `${start > 0 ? '…' : ''}${text.slice(start, found.index)}`,
+      match: found[0],
+      after: `${text.slice(matchEnd, end)}${end < text.length ? '…' : ''}`,
+    }
   }
 
   private attachmentsOf(message: Message): MessageAttachmentView[] {

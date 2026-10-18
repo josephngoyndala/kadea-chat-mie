@@ -122,6 +122,8 @@ router
       .where('conversationId', router.matchers.number())
       .where('messageId', router.matchers.number())
 
+    router.get('messages/search', [controllers.MessageSearch, 'index']).as('messages.search')
+
     router.get('users', [controllers.Users, 'index'])
     router
       .post('users/:userId/block', [controllers.Blocks, 'store'])

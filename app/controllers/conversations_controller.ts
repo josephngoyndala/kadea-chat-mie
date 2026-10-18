@@ -35,7 +35,7 @@ export default class ConversationsController {
    * Ouvre une conversation et affiche son historique. Répond « introuvable »
    * si l'utilisateur n'en est pas membre.
    */
-  async show({ auth, params, view }: HttpContext) {
+  async show({ auth, params, request, view }: HttpContext) {
     const user = auth.getUserOrFail()
     const conversationId = Number(params.id)
 
@@ -50,9 +50,19 @@ export default class ConversationsController {
     this.realtime.statusChanged(conversation.id, readIds)
     await this.deliverPending(user)
 
+    /**
+     * Venant d'un résultat de recherche (?message=12), l'historique est centré
+     * sur le message trouvé ; la page défile jusqu'à lui et le met en évidence.
+     */
+    const requested = Number.parseInt(String(request.qs().message ?? ''), 10)
+    const around =
+      Number.isInteger(requested) && requested > 0
+        ? await this.conversations.historyAround(conversation, user, requested)
+        : null
+
     const [items, messages] = await Promise.all([
       this.conversations.listFor(user),
-      this.conversations.history(conversation, user),
+      around ?? this.conversations.history(conversation, user),
     ])
 
     const header = await this.presenter.header(conversation, user)
@@ -67,6 +77,7 @@ export default class ConversationsController {
 
     return view.render('pages/conversations/show', {
       activeId: conversation.id,
+      focusId: around ? requested : null,
       conversations: await this.presenter.cards(items, user),
       header,
       blocks,
