@@ -1,4 +1,5 @@
 import type User from '#models/user'
+import BlockService from '#services/block_service'
 import ConversationPresenter from '#services/conversation_presenter'
 import ConversationService from '#services/conversation_service'
 import RealtimeService from '#services/realtime_service'
@@ -10,6 +11,7 @@ import type { HttpContext } from '@adonisjs/core/http'
  * liste, ouverture d'une conversation et démarrage d'une conversation privée.
  */
 export default class ConversationsController {
+  private blocks = new BlockService()
   private conversations = new ConversationService()
   private presenter = new ConversationPresenter()
   private realtime = new RealtimeService()
@@ -53,10 +55,21 @@ export default class ConversationsController {
       this.conversations.history(conversation, user),
     ])
 
+    const header = await this.presenter.header(conversation, user)
+
+    /**
+     * Dans une conversation privée, qui a bloqué qui : la page remplace la
+     * zone de saisie par une bannière et propose « Bloquer » ou « Débloquer ».
+     */
+    const blocks = header.otherUserId
+      ? await this.blocks.stateBetween(user.id, header.otherUserId)
+      : { byMe: false, byThem: false }
+
     return view.render('pages/conversations/show', {
       activeId: conversation.id,
       conversations: await this.presenter.cards(items, user),
-      header: await this.presenter.header(conversation, user),
+      header,
+      blocks,
       groups: this.presenter.groupMessages(
         messages,
         user,
@@ -161,6 +174,16 @@ export default class ConversationsController {
 
     if (userId === user.id) {
       session.flash('error', 'Vous ne pouvez pas démarrer une discussion avec vous-même.')
+      return response.redirect().toRoute('users.index')
+    }
+
+    const blockState = await this.blocks.stateBetween(user.id, userId)
+    if (blockState.byMe) {
+      session.flash('error', 'Vous avez bloqué cet utilisateur. Débloquez-le depuis votre profil.')
+      return response.redirect().toRoute('users.index')
+    }
+    if (blockState.byThem) {
+      session.flash('error', 'Vous ne pouvez pas démarrer une discussion avec cet utilisateur.')
       return response.redirect().toRoute('users.index')
     }
 

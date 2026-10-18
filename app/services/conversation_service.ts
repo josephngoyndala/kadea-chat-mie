@@ -340,10 +340,9 @@ export default class ConversationService {
         last_read_message_id: db.raw('GREATEST(COALESCE(last_read_message_id, 0), ?)', [
           latestMessage.id,
         ]),
-        last_delivered_message_id: db.raw(
-          'GREATEST(COALESCE(last_delivered_message_id, 0), ?)',
-          [latestMessage.id]
-        ),
+        last_delivered_message_id: db.raw('GREATEST(COALESCE(last_delivered_message_id, 0), ?)', [
+          latestMessage.id,
+        ]),
       })
 
     return this.changedMessageIds(
@@ -384,10 +383,9 @@ export default class ConversationService {
     await ConversationMember.query()
       .where('id', membership.id)
       .update({
-        last_delivered_message_id: db.raw(
-          'GREATEST(COALESCE(last_delivered_message_id, 0), ?)',
-          [latestMessage.id]
-        ),
+        last_delivered_message_id: db.raw('GREATEST(COALESCE(last_delivered_message_id, 0), ?)', [
+          latestMessage.id,
+        ]),
       })
 
     return this.changedMessageIds(conversationId, userId, previousDelivered, latestMessage.id)
@@ -433,7 +431,9 @@ export default class ConversationService {
       .where('conversation_id', conversationId)
       .whereIn('user_id', userIds)
       .where((pointer) => {
-        pointer.whereNull('last_delivered_message_id').orWhere('last_delivered_message_id', '<', messageId)
+        pointer
+          .whereNull('last_delivered_message_id')
+          .orWhere('last_delivered_message_id', '<', messageId)
       })
       .update({ last_delivered_message_id: messageId })
   }

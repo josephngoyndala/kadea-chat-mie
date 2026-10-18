@@ -1,4 +1,5 @@
 import type Message from '#models/message'
+import BlockService from '#services/block_service'
 import ConversationPresenter from '#services/conversation_presenter'
 import ConversationService from '#services/conversation_service'
 import MessageAttachmentService, {
@@ -23,6 +24,7 @@ import type { HttpContext } from '@adonisjs/core/http'
  * Chaque changement est annoncé en temps réel aux participants.
  */
 export default class MessagesController {
+  private blocks = new BlockService()
   private conversations = new ConversationService()
   private messages = new MessageService()
   private presenter = new ConversationPresenter()
@@ -86,6 +88,21 @@ export default class MessagesController {
   async store({ auth, params, request, response, session, view }: HttpContext) {
     const user = auth.getUserOrFail()
     const conversation = await this.conversations.findForMember(user, Number(params.conversationId))
+
+    /**
+     * Un blocage, dans un sens ou dans l'autre, empêche d'envoyer un message
+     * dans une conversation privée.
+     */
+    const restriction = await this.blocks.restrictionFor(user, conversation)
+    if (restriction) {
+      if (this.wantsFragment(request)) {
+        return response.status(422).json({ errors: [{ message: restriction }] })
+      }
+
+      session.flash('error', restriction)
+      return response.redirect().toRoute('conversations.show', { id: conversation.id })
+    }
+
     const payload = await request.validateUsing(sendMessageValidator)
     const body = payload.body ?? ''
 

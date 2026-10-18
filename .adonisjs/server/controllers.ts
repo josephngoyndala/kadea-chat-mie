@@ -4,6 +4,7 @@
  */
 
 export const controllers = {
+  Blocks: () => import('#controllers/blocks_controller'),
   Conversations: () => import('#controllers/conversations_controller'),
   EmailVerification: () => import('#controllers/email_verification_controller'),
   GroupMembers: () => import('#controllers/group_members_controller'),
