@@ -101,7 +101,7 @@ export class MessageDeletionSchema extends BaseModel {
 }
 
 export class MessageSchema extends BaseModel {
-  static $columns = ['body', 'conversationId', 'createdAt', 'deletedAt', 'editedAt', 'id', 'senderId', 'updatedAt'] as const
+  static $columns = ['body', 'conversationId', 'createdAt', 'deletedAt', 'editedAt', 'id', 'senderId', 'silencedAt', 'updatedAt'] as const
   $columns = MessageSchema.$columns
   @column()
   declare body: string | null
@@ -117,8 +117,21 @@ export class MessageSchema extends BaseModel {
   declare id: number
   @column()
   declare senderId: number
+  @column.dateTime()
+  declare silencedAt: DateTime | null
   @column.dateTime({ autoCreate: true, autoUpdate: true })
   declare updatedAt: DateTime | null
+}
+
+export class RateLimitSchema extends BaseModel {
+  static $columns = ['expire', 'key', 'points'] as const
+  $columns = RateLimitSchema.$columns
+  @column()
+  declare expire: bigint | number | null
+  @column({ isPrimary: true })
+  declare key: string
+  @column()
+  declare points: number
 }
 
 export class RememberMeTokenSchema extends BaseModel {

@@ -1,11 +1,14 @@
-import { DateTime } from 'luxon'
 import type Conversation from '#models/conversation'
+import type ConversationMember from '#models/conversation_member'
 import type Message from '#models/message'
 import type User from '#models/user'
 import AvatarService from '#services/avatar_service'
+import BlockService from '#services/block_service'
 import type { ConversationWithLastMessage } from '#services/conversation_service'
 import { dayKey, formatDayLabel, formatListDate, formatMessageTime } from '#services/date_formatter'
 import { isWithinEditWindow } from '#services/message_rules'
+import type { MessageHit } from '#services/message_search_service'
+import { isUserOnline } from '#services/presence'
 
 export type ConversationCard = {
   id: number
@@ -28,6 +31,20 @@ export type ConversationHeader = {
   isOnline: boolean
 }
 
+export type MessageSearchResult = {
+  messageId: number
+  conversationId: number
+  title: string
+  initials: string
+  avatarUrl: string | null
+  isGroup: boolean
+  author: string | null
+  time: string
+  before: string
+  match: string
+  after: string
+}
+
 export type MessageAttachmentView = {
   id: number
   originalName: string
@@ -37,6 +54,14 @@ export type MessageAttachmentView = {
   isVideo: boolean
   sizeLabel: string
 }
+
+/**
+ * Statut d'un message que l'on a envoyé :
+ * - sent : envoyé, pas encore reçu (le destinataire est hors ligne) → un trait ;
+ * - delivered : reçu (le destinataire est connecté) → deux traits gris ;
+ * - read : lu (le destinataire a ouvert la conversation) → deux traits bleus.
+ */
+export type MessageStatus = 'sent' | 'delivered' | 'read'
 
 export type MessageBubble = {
   id: number
@@ -50,6 +75,7 @@ export type MessageBubble = {
   authorName: string | null
   authorColor: number
   attachments: MessageAttachmentView[]
+  status: MessageStatus | null
 }
 
 export type MessageGroup = {
@@ -72,6 +98,7 @@ export type GroupMemberView = {
  */
 export default class ConversationPresenter {
   private avatars = new AvatarService()
+  private blocks = new BlockService()
 
   /**
    * Indique si les messages d'une conversation doivent afficher leur auteur.
@@ -84,9 +111,11 @@ export default class ConversationPresenter {
    * Cartes de la liste des conversations.
    */
   async cards(items: ConversationWithLastMessage[], viewer: User): Promise<ConversationCard[]> {
+    const blockers = await this.blocks.blockerIdsOf(viewer)
+
     return Promise.all(
       items.map(async ({ conversation, lastMessage, unreadCount }) => {
-        const identity = await this.identity(conversation, viewer)
+        const identity = await this.identity(conversation, viewer, blockers)
 
         return {
           id: conversation.id,
@@ -101,6 +130,43 @@ export default class ConversationPresenter {
   }
 
   /**
+   * Résultats de la recherche d'un mot dans les messages : la conversation
+   * d'origine (nom et photo), l'auteur, l'heure et un extrait du message où le
+   * mot trouvé est isolé pour être mis en évidence.
+   */
+  async searchResults(
+    hits: MessageHit[],
+    viewer: User,
+    term: string
+  ): Promise<MessageSearchResult[]> {
+    const blockers = await this.blocks.blockerIdsOf(viewer)
+
+    return Promise.all(
+      hits.map(async ({ message, conversation }) => {
+        const identity = await this.identity(conversation, viewer, blockers)
+        const isGroup = conversation.type === 'group'
+
+        let author: string | null = null
+        if (message.senderId === viewer.id) {
+          author = 'Vous'
+        } else if (isGroup) {
+          author = message.sender?.fullName?.split(' ')[0] ?? 'Membre'
+        }
+
+        return {
+          messageId: message.id,
+          conversationId: conversation.id,
+          ...identity,
+          isGroup,
+          author,
+          time: formatListDate(message.createdAt),
+          ...this.excerptOf(message.body ?? '', term),
+        }
+      })
+    )
+  }
+
+  /**
    * En-tête d'une conversation ouverte.
    */
   async header(conversation: Conversation, viewer: User): Promise<ConversationHeader> {
@@ -109,13 +175,16 @@ export default class ConversationPresenter {
       ? conversation.members.find((member) => member.userId !== viewer.id)
       : null
 
+    const blockers = await this.blocks.blockerIdsOf(viewer)
+
+    /**
+     * Un utilisateur bloqué ne voit plus si l'autre est en ligne.
+     */
     const otherUser = otherMember?.user
-    const isOnline = Boolean(
-      otherUser?.lastSeenAt && DateTime.now().diff(otherUser.lastSeenAt, 'minutes').minutes < 2
-    )
+    const isOnline = otherUser && !blockers.has(otherUser.id) ? isUserOnline(otherUser) : false
 
     return {
-      ...(await this.identity(conversation, viewer)),
+      ...(await this.identity(conversation, viewer, blockers)),
       isGroup,
       memberCount: conversation.members.length,
       otherUserId: otherUser?.id ?? null,
@@ -154,8 +223,17 @@ export default class ConversationPresenter {
    * fait que cacher les boutons non permis. Dans un groupe, la bulle des
    * autres affiche le nom de son auteur (le message doit avoir son auteur
    * chargé).
+   *
+   * `members` sont les membres de la conversation (avec leurs pointeurs de
+   * réception et de lecture) : ils servent à calculer les traits des messages
+   * de l'utilisateur.
    */
-  bubble(message: Message, viewer: User, showAuthor: boolean): MessageBubble {
+  bubble(
+    message: Message,
+    viewer: User,
+    showAuthor: boolean,
+    members: ConversationMember[] = []
+  ): MessageBubble {
     const isDeleted = Boolean(message.deletedAt)
     const isMine = message.senderId === viewer.id
 
@@ -175,6 +253,7 @@ export default class ConversationPresenter {
       authorName: showAuthor && !isMine ? (message.sender?.fullName ?? 'Membre') : null,
       authorColor: message.senderId % 6,
       attachments: isDeleted ? [] : this.attachmentsOf(message),
+      status: isMine && !isDeleted ? this.statusOf(message, members) : null,
     }
   }
 
@@ -182,9 +261,15 @@ export default class ConversationPresenter {
    * Données du morceau de HTML renvoyé après une action sur un message : la
    * bulle et, si c'est le premier message du jour, l'intitulé du jour.
    */
-  fragment(message: Message, viewer: User, startsNewDay: boolean, showAuthor: boolean) {
+  fragment(
+    message: Message,
+    viewer: User,
+    startsNewDay: boolean,
+    showAuthor: boolean,
+    members: ConversationMember[] = []
+  ) {
     return {
-      message: this.bubble(message, viewer, showAuthor),
+      message: this.bubble(message, viewer, showAuthor, members),
       dayLabel: startsNewDay ? formatDayLabel(message.createdAt) : null,
     }
   }
@@ -192,7 +277,12 @@ export default class ConversationPresenter {
   /**
    * Messages regroupés par jour, avec un intitulé pour chaque jour.
    */
-  groupMessages(messages: Message[], viewer: User, showAuthor: boolean): MessageGroup[] {
+  groupMessages(
+    messages: Message[],
+    viewer: User,
+    showAuthor: boolean,
+    members: ConversationMember[] = []
+  ): MessageGroup[] {
     const groups: MessageGroup[] = []
     let currentDay = ''
 
@@ -204,17 +294,49 @@ export default class ConversationPresenter {
         currentDay = day
       }
 
-      groups[groups.length - 1].messages.push(this.bubble(message, viewer, showAuthor))
+      groups[groups.length - 1].messages.push(this.bubble(message, viewer, showAuthor, members))
     }
 
     return groups
   }
 
   /**
+   * Statut d'un message envoyé par l'utilisateur. Dans un groupe, il faut que
+   * tous les autres membres l'aient reçu (ou lu) pour que le statut avance.
+   */
+  private statusOf(message: Message, members: ConversationMember[]): MessageStatus {
+    /**
+     * Un message envoyé à quelqu'un qui a bloqué son auteur n'est jamais remis :
+     * il reste à un seul trait, même si le destinataire est en ligne.
+     */
+    if (message.silencedAt) {
+      return 'sent'
+    }
+
+    const recipients = members.filter((member) => member.userId !== message.senderId)
+    if (recipients.length === 0) {
+      return 'sent'
+    }
+
+    if (recipients.every((member) => (member.lastReadMessageId ?? 0) >= message.id)) {
+      return 'read'
+    }
+    if (
+      recipients.every(
+        (member) =>
+          Math.max(member.lastDeliveredMessageId ?? 0, member.lastReadMessageId ?? 0) >= message.id
+      )
+    ) {
+      return 'delivered'
+    }
+    return 'sent'
+  }
+
+  /**
    * Nom, initiales et photo à afficher pour une conversation : l'autre
    * participant pour une conversation privée, le groupe sinon.
    */
-  private async identity(conversation: Conversation, viewer: User) {
+  private async identity(conversation: Conversation, viewer: User, blockers: Set<number>) {
     if (conversation.type === 'group') {
       const title = conversation.name ?? 'Groupe'
       return {
@@ -229,10 +351,14 @@ export default class ConversationPresenter {
       return { title: 'Utilisateur introuvable', initials: '?', avatarUrl: null }
     }
 
+    /**
+     * Un utilisateur bloqué ne voit plus la photo de celui qui l'a bloqué :
+     * ses initiales s'affichent à la place, sans rien lui signaler.
+     */
     return {
       title: other.fullName ?? other.email,
       initials: other.initials,
-      avatarUrl: await this.avatars.urlFor(other),
+      avatarUrl: blockers.has(other.id) ? null : await this.avatars.urlFor(other),
     }
   }
 
@@ -271,6 +397,31 @@ export default class ConversationPresenter {
       return `${firstName} : ${clipped}`
     }
     return clipped
+  }
+
+  /**
+   * Court extrait du message autour du mot cherché, découpé en trois parties
+   * (avant, mot trouvé, après) pour que la vue puisse surligner le mot sans
+   * insérer de HTML.
+   */
+  private excerptOf(body: string, term: string) {
+    const text = body.replace(/\s+/g, ' ').trim()
+    const escaped = term.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const found = escaped ? new RegExp(escaped, 'i').exec(text) : null
+
+    if (!found) {
+      return { before: text.slice(0, 80), match: '', after: '' }
+    }
+
+    const start = Math.max(0, found.index - 30)
+    const matchEnd = found.index + found[0].length
+    const end = Math.min(text.length, matchEnd + 50)
+
+    return {
+      before: `${start > 0 ? '…' : ''}${text.slice(start, found.index)}`,
+      match: found[0],
+      after: `${text.slice(matchEnd, end)}${end < text.length ? '…' : ''}`,
+    }
   }
 
   private attachmentsOf(message: Message): MessageAttachmentView[] {

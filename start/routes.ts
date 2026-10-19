@@ -122,7 +122,15 @@ router
       .where('conversationId', router.matchers.number())
       .where('messageId', router.matchers.number())
 
+    router.get('messages/search', [controllers.MessageSearch, 'index']).as('messages.search')
+
     router.get('users', [controllers.Users, 'index'])
+    router
+      .post('users/:userId/block', [controllers.Blocks, 'store'])
+      .where('userId', router.matchers.number())
+    router
+      .post('users/:userId/unblock', [controllers.Blocks, 'destroy'])
+      .where('userId', router.matchers.number())
 
     router.get('profile', [controllers.Profile, 'show'])
     router.post('profile', [controllers.Profile, 'update'])

@@ -29,8 +29,20 @@ export default class MessageService {
    * conversation (qui sert à trier la liste). Indique aussi si ce message
    * ouvre une nouvelle journée dans la conversation, pour afficher le
    * séparateur de jour.
+   *
+   * Si `silencedFor` est renseigné (le destinataire a bloqué l'auteur), le
+   * message est enregistré mais caché à ce destinataire : il ne le verra
+   * jamais, ne sera pas prévenu, et la conversation ne remonte pas dans sa
+   * liste. Pour son auteur, rien ne change, sauf que le message reste à un
+   * seul trait.
    */
-  async send(user: User, conversation: Conversation, body: string, files: MultipartFile[] = []) {
+  async send(
+    user: User,
+    conversation: Conversation,
+    body: string,
+    files: MultipartFile[] = [],
+    silencedFor: number | null = null
+  ) {
     return db.transaction(async (trx) => {
       const previous = await Message.query({ client: trx })
         .where('conversation_id', conversation.id)
@@ -43,17 +55,27 @@ export default class MessageService {
           conversationId: conversation.id,
           senderId: user.id,
           body: trimmed.length > 0 ? trimmed : null,
+          silencedAt: silencedFor ? DateTime.now() : null,
         },
         { client: trx }
       )
+
+      if (silencedFor) {
+        await MessageDeletion.create(
+          { messageId: message.id, userId: silencedFor },
+          { client: trx }
+        )
+      }
 
       if (files.length > 0) {
         await this.attachments.attachToMessage(message, files, trx)
       }
 
-      await Conversation.query({ client: trx })
-        .where('id', conversation.id)
-        .update({ last_message_at: message.createdAt.toJSDate() })
+      if (!silencedFor) {
+        await Conversation.query({ client: trx })
+          .where('id', conversation.id)
+          .update({ last_message_at: message.createdAt.toJSDate() })
+      }
 
       await message.load('sender')
       await message.load('attachments')

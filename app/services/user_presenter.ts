@@ -1,5 +1,6 @@
 import type User from '#models/user'
 import AvatarService from '#services/avatar_service'
+import BlockService from '#services/block_service'
 import { formatShortDate } from '#services/date_formatter'
 
 export type DirectoryEntry = {
@@ -17,15 +18,22 @@ export type DirectoryEntry = {
  */
 export default class UserPresenter {
   private avatars = new AvatarService()
+  private blocks = new BlockService()
 
-  async directory(users: User[]): Promise<DirectoryEntry[]> {
+  /**
+   * Si `viewer` est renseigné, il ne voit plus la photo des utilisateurs qui
+   * l'ont bloqué (leurs initiales s'affichent à la place).
+   */
+  async directory(users: User[], viewer?: User): Promise<DirectoryEntry[]> {
+    const blockers = viewer ? await this.blocks.blockerIdsOf(viewer) : new Set<number>()
+
     return Promise.all(
       users.map(async (user) => ({
         id: user.id,
         name: user.fullName ?? this.maskEmail(user.email),
         maskedEmail: this.maskEmail(user.email),
         initials: user.initials,
-        avatarUrl: await this.avatars.urlFor(user),
+        avatarUrl: blockers.has(user.id) ? null : await this.avatars.urlFor(user),
         joinedOn: formatShortDate(user.createdAt),
         searchText: this.normalize(`${user.fullName ?? ''} ${user.email}`),
       }))
