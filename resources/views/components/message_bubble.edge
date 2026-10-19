@@ -28,7 +28,7 @@
       tabindex="0"
       x-on:click="toggle()"
       x-on:keydown.enter="toggle()"
-      class="cursor-pointer rounded-2xl px-4 py-2.5 {{
+      class="cursor-pointer rounded-2xl px-3.5 py-1.5 {{
         message.isDeleted
           ? 'border border-dashed border-line text-muted'
           : message.isMine
@@ -48,12 +48,7 @@
         </p>
       @else
         @if(message.body)
-          <p
-            data-message-body
-            class="whitespace-pre-wrap text-[15px] leading-relaxed [overflow-wrap:anywhere]"
-          >
-            {{ message.body }}
-          </p>
+          <p data-message-body class="whitespace-pre-wrap text-[15px] leading-snug [overflow-wrap:anywhere]">{{ message.body }}</p>
         @end
         @if(message.attachments?.length)
           <div class="{{ message.body ? 'mt-2' : '' }} flex flex-col gap-2">
@@ -116,7 +111,7 @@
       @end
 
       <p
-        class="mt-1 flex items-center justify-end gap-1 text-[11px] {{
+        class="mt-0.5 flex items-center justify-end gap-1 text-[11px] leading-none {{
           message.isDeleted
             ? 'text-muted'
             : message.isMine

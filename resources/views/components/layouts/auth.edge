@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#e4203d" />
     <title>{{ pageTitle ? `${pageTitle} · Kadea Chat` : 'Kadea Chat' }}</title>
+    @include('partials/theme_init')
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @stack('dumper')
   </head>
@@ -53,7 +54,7 @@
         </div>
       </aside>
 
-      <main class="flex min-w-0 flex-col px-6 py-8 lg:px-16 lg:py-10">
+      <main class="flex min-w-0 flex-col px-6 py-6 lg:px-16 lg:py-6">
         <a
           href="/"
           class="hidden items-center gap-2 self-start text-sm font-medium text-muted transition hover:text-ink lg:inline-flex"
@@ -64,15 +65,11 @@
 
         </a>
 
-        <div class="mx-auto flex w-full max-w-[540px] flex-1 flex-col justify-center py-8">
+        <div class="mx-auto flex w-full max-w-[540px] flex-1 flex-col justify-center py-4">
           {{{ await $slots.main() }}}
         </div>
 
-        <p class="text-center text-xs text-muted">
-          ©
-          {{ new Date().getFullYear() }}
-          Kadea Academy. Tous droits réservés.
-        </p>
+        <p class="pt-2 text-center text-[11px] text-muted">© {{ new Date().getFullYear() }} Mie. Tous droits réservés.</p>
       </main>
     </div>
     @include('partials/flash_alerts')

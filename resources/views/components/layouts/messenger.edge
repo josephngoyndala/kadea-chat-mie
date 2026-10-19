@@ -8,6 +8,7 @@
     <meta name="theme-color" content="#e4203d" />
     <meta name="csrf-token" content="{{ csrfToken }}" />
     <title>{{ pageTitle ? `${pageTitle} · Kadea Chat` : 'Kadea Chat' }}</title>
+    @include('partials/theme_init')
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @stack('dumper')
   </head>

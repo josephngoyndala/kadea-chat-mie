@@ -48,6 +48,7 @@ export default class ConversationsController {
      */
     const readIds = await this.conversations.markAsRead(conversation.id, user.id)
     this.realtime.statusChanged(conversation.id, readIds)
+    this.refreshOwnLists(conversation.id, user, readIds)
     await this.deliverPending(user)
 
     /**
@@ -133,6 +134,7 @@ export default class ConversationsController {
     const conversation = await this.conversations.findForMember(user, conversationId)
     const readIds = await this.conversations.markAsRead(conversation.id, user.id)
     this.realtime.statusChanged(conversation.id, readIds)
+    this.refreshOwnLists(conversation.id, user, readIds)
 
     return response.noContent()
   }
@@ -222,6 +224,17 @@ export default class ConversationsController {
 
     session.flash('success', 'La discussion a été supprimée de votre liste.')
     return response.redirect().toRoute('dashboard')
+  }
+
+  /**
+   * Quand l'utilisateur lit des messages, ses autres écrans ouverts (autre
+   * onglet, téléphone) rafraîchissent la carte de la conversation : le compteur
+   * de messages non lus disparaît partout.
+   */
+  private refreshOwnLists(conversationId: number, user: User, readIds: number[]) {
+    if (readIds.length > 0) {
+      this.realtime.conversationUpdatedForUser(conversationId, user.id)
+    }
   }
 
   /**

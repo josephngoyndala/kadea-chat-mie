@@ -748,9 +748,7 @@ Alpine.data('conversationChat', function () {
       try {
         const form = event.target
         const payload =
-          this.pendingFiles.length > 0
-            ? this.buildSendFormData(form)
-            : this.buildTextPayload(form)
+          this.pendingFiles.length > 0 ? this.buildSendFormData(form) : this.buildTextPayload(form)
         const response = await postToServer(form, payload)
 
         if (response.status === 201) {
@@ -911,10 +909,17 @@ Alpine.data('conversationList', function () {
         const title = (card.dataset.title || card.textContent || '').toLowerCase()
         const isGroup = card.dataset.isGroup === '1'
 
+        const hasUnread = parseInt(card.dataset.unreadCount || '0', 10) > 0
+
+        /**
+         * « Directes » et « Groupes » ne montrent que les discussions qui ont
+         * des messages non lus : dès qu'on les a lus, la discussion disparaît
+         * de ces onglets (elle reste dans « Toutes »).
+         */
         let matchesSearch = !q || title.includes(q)
         let matchesFilter = true
-        if (this.filter === 'groups') matchesFilter = isGroup
-        if (this.filter === 'direct') matchesFilter = !isGroup
+        if (this.filter === 'groups') matchesFilter = isGroup && hasUnread
+        if (this.filter === 'direct') matchesFilter = !isGroup && hasUnread
 
         if (matchesSearch && matchesFilter) {
           card.classList.remove('hidden')
@@ -1001,6 +1006,17 @@ Alpine.data('conversationList', function () {
         window.location.assign(this.$el.dataset.dashboardUrl)
       }
     },
+  }
+})
+
+/**
+ * Le bouton « Retour » du navigateur peut rouvrir une page telle qu'elle était
+ * (compteurs de messages non lus périmés, par exemple) : on la recharge pour
+ * qu'elle reflète l'état actuel.
+ */
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) {
+    window.location.reload()
   }
 })
 
