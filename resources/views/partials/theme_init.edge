@@ -1,0 +1,10 @@
+{{-- Applique le thème choisi (clair ou sombre) avant l'affichage, pour éviter un flash blanc --}}
+<script>
+  try {
+    var savedTheme = localStorage.getItem('theme')
+    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+    if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+      document.documentElement.classList.add('dark')
+    }
+  } catch (error) {}
+</script>

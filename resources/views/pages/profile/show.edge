@@ -240,6 +240,19 @@
           </p>
         @end
       </section>
+
+      {{-- Apparence --}}
+      <section
+        class="min-w-0 rounded-3xl border border-line bg-white p-5 shadow-card sm:rounded-card sm:p-8"
+      >
+        <h2 class="text-lg font-bold tracking-tight">Apparence</h2>
+        <p class="mt-1 text-sm text-muted">
+          Choisissez le thème clair ou sombre. Votre choix est mémorisé sur cet appareil.
+        </p>
+        <div class="mt-5">
+          @include('partials/theme_toggle')
+        </div>
+      </section>
     </div>
   @end
 @end
