@@ -1,7 +1,7 @@
 @layouts.marketing()
   <section class="overflow-x-clip">
     <div
-      class="mx-auto grid max-w-7xl items-center gap-16 px-6 pb-20 pt-32 sm:px-10 lg:grid-cols-[1.05fr_1fr] lg:pb-28 lg:pt-44"
+      class="mx-auto grid max-w-7xl items-center gap-10 px-6 pb-12 pt-24 sm:px-10 lg:grid-cols-[1.05fr_1fr] lg:gap-12 lg:pb-8 lg:pt-28"
     >
       <div>
         <p class="flex items-center gap-3 text-xs font-bold uppercase tracking-[0.2em] text-brand">
@@ -10,7 +10,7 @@
         </p>
 
         <h1
-          class="mt-8 text-[44px] font-extrabold leading-[0.98] tracking-[-0.04em] sm:text-7xl lg:text-[88px]"
+          class="mt-5 text-[40px] font-extrabold leading-[0.98] tracking-[-0.04em] sm:text-6xl lg:text-[64px]"
         >
           
           Apprendre ensemble.
@@ -18,11 +18,11 @@
           <span class="text-brand">Échanger autrement.</span>
         </h1>
 
-        <p class="mt-8 max-w-md text-lg leading-relaxed text-muted">
+        <p class="mt-5 max-w-md text-base leading-relaxed text-muted">
           Retrouvez votre communauté, partagez vos idées et faites avancer vos projets dans un espace simple, rapide et sécurisé.
         </p>
 
-        <div class="mt-10 flex flex-wrap items-center gap-x-8 gap-y-5">
+        <div class="mt-7 flex flex-wrap items-center gap-x-8 gap-y-4">
           @if(auth.user)
             @button({ route: 'dashboard', arrow: true })
               Ouvrir mes discussions
@@ -41,7 +41,7 @@
           @end
         </div>
 
-        <div class="mt-12 flex items-center gap-4">
+        <div class="mt-8 flex items-center gap-4">
           <div class="flex -space-x-2">
             @!avatar({ initials: 'gm', size: 38, class: 'ring-2 ring-white' })
             @!avatar({
@@ -66,15 +66,15 @@
       {{-- Aperçu décoratif de la messagerie --}}
       <div aria-hidden="true" class="relative mx-auto w-full max-w-xl lg:max-w-none">
         <div
-          class="absolute -right-4 -top-6 h-[85%] w-[88%] rounded-[36px] bg-brand sm:-right-8 lg:-right-10 lg:-top-10"
+          class="absolute -right-4 -top-3 h-[85%] w-[88%] rounded-[32px] bg-brand sm:-right-6 lg:-right-8 lg:-top-5"
         >
-          <span class="absolute right-8 top-3 text-8xl font-black leading-none text-white/20">
+          <span class="absolute right-7 top-2 text-7xl font-black leading-none text-white/20">
             K
           </span>
         </div>
 
         <div
-          class="relative mt-10 overflow-hidden rounded-3xl border border-line bg-white shadow-[0_40px_80px_-40px_rgba(23,23,23,0.45)]"
+          class="relative mt-6 overflow-hidden rounded-3xl border border-line bg-white shadow-[0_40px_80px_-40px_rgba(23,23,23,0.45)]"
         >
           <div class="flex items-center justify-between border-b border-line px-5 py-3.5">
             <div class="flex gap-1.5">
@@ -85,7 +85,7 @@
             <span class="text-[11px] font-semibold text-muted">Kadea Chat</span>
           </div>
 
-          <div class="grid min-h-[300px] grid-cols-[40%_60%] sm:min-h-[340px]">
+          <div class="grid min-h-[230px] grid-cols-[40%_60%] sm:min-h-[250px]">
             <div class="border-r border-line p-4 sm:p-5">
               <p class="text-sm font-bold">Discussions</p>
               <div class="mt-4 h-9 rounded-xl bg-paper"></div>
@@ -122,7 +122,7 @@
                   <p class="text-[11px] text-muted">3 membres</p>
                 </div>
               </div>
-              <div class="flex flex-1 flex-col justify-end gap-3 p-4 pb-8">
+              <div class="flex flex-1 flex-col justify-end gap-2.5 p-4 pb-7">
                 <p
                   class="max-w-[85%] self-start rounded-2xl rounded-bl-md bg-white px-4 py-2.5 text-xs shadow-card"
                 >
@@ -162,15 +162,15 @@
     <div
       class="mx-auto grid max-w-7xl divide-y divide-white/15 md:grid-cols-3 md:divide-x md:divide-y-0"
     >
-      <div class="px-6 py-10 sm:px-10">
+      <div class="px-6 py-6 sm:px-10">
         <h2 class="text-base font-bold">Instantané</h2>
         <p class="mt-2 text-sm text-white/70">Vos messages arrivent sans recharger la page.</p>
       </div>
-      <div class="px-6 py-10 sm:px-10">
+      <div class="px-6 py-6 sm:px-10">
         <h2 class="text-base font-bold">Ensemble</h2>
         <p class="mt-2 text-sm text-white/70">Échangez en privé ou créez votre groupe.</p>
       </div>
-      <div class="px-6 py-10 sm:px-10">
+      <div class="px-6 py-6 sm:px-10">
         <h2 class="text-base font-bold">Sécurisé</h2>
         <p class="mt-2 text-sm text-white/70">Vos conversations restent entre leurs membres.</p>
       </div>
