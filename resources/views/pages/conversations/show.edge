@@ -13,7 +13,7 @@
       x-on:submit="handleSubmit($event)"
       data-user-id="{{ auth?.user?.id }}"
       data-conversation-id="{{ activeId }}"
-      data-other-user-id="{{ header.otherUserId ?? '' }}"
+      data-other-user-id="{{ blocks.byThem ? '' : (header.otherUserId ?? '') }}"
       data-is-online="{{ header.isOnline ? '1' : '0' }}"
       data-message-url="{{ urlFor('messages.show', { conversationId: activeId, messageId: '0' }) }}"
       data-catch-up-url="{{ urlFor('messages.index', { conversationId: activeId }) }}"
@@ -65,20 +65,23 @@
             </a>
           @else
             <h1 class="truncate text-base font-bold tracking-tight">{{ header.title }}</h1>
-            <p
-              x-show="!typingUser && isOnline"
-              class="truncate text-xs text-emerald-600 flex items-center gap-1.5 font-semibold"
-            >
-              <span class="size-2 rounded-full bg-emerald-500 shadow-sm animate-pulse"></span>
-              <span>En ligne</span>
-            </p>
-            <p
-              x-show="!typingUser && !isOnline"
-              class="truncate text-xs text-muted flex items-center gap-1.5 font-medium"
-            >
-              <span class="size-2 rounded-full bg-zinc-300"></span>
-              <span>Hors ligne</span>
-            </p>
+            {{-- Un utilisateur bloqué ne voit plus la présence de celui qui l'a bloqué --}}
+            @if(!blocks.byThem)
+              <p
+                x-show="!typingUser && isOnline"
+                class="truncate text-xs text-emerald-600 flex items-center gap-1.5 font-semibold"
+              >
+                <span class="size-2 rounded-full bg-emerald-500 shadow-sm animate-pulse"></span>
+                <span>En ligne</span>
+              </p>
+              <p
+                x-show="!typingUser && !isOnline"
+                class="truncate text-xs text-muted flex items-center gap-1.5 font-medium"
+              >
+                <span class="size-2 rounded-full bg-zinc-300"></span>
+                <span>Hors ligne</span>
+              </p>
+            @end
             <p
               x-show="typingUser"
               x-cloak
@@ -128,6 +131,65 @@
             role="menu"
             class="absolute right-0 top-full z-20 mt-1 min-w-[220px] overflow-hidden rounded-2xl border border-line bg-white py-1 shadow-card"
           >
+            {{-- Bloquer / débloquer (conversations privées uniquement) --}}
+            @if(header.otherUserId)
+              @if(blocks.byMe)
+                @form({
+                  route: 'blocks.destroy',
+                  routeParams: { userId: header.otherUserId },
+                  method: 'POST',
+                  class: 'block',
+                })
+                  <button
+                    type="submit"
+                    role="menuitem"
+                    class="flex w-full cursor-pointer items-center gap-2 px-4 py-3 text-left text-sm font-semibold text-ink transition hover:bg-paper"
+                  >
+                    @svg('lucide:circle-check', { width: 16, height: 16 })
+                    Débloquer cet utilisateur
+                  </button>
+                @end
+              @else
+                @form({
+                  route: 'blocks.store',
+                  routeParams: { userId: header.otherUserId },
+                  method: 'POST',
+                  class: 'block',
+                  'x-data': '{ confirming: false }',
+                })
+                  <button
+                    type="button"
+                    x-show="!confirming"
+                    x-on:click="confirming = true"
+                    role="menuitem"
+                    class="flex w-full cursor-pointer items-center gap-2 px-4 py-3 text-left text-sm font-semibold text-ink transition hover:bg-paper"
+                  >
+                    @svg('lucide:ban', { width: 16, height: 16 })
+                    Bloquer cet utilisateur
+                  </button>
+                  <div x-show="confirming" x-cloak class="px-3 py-2">
+                    <p class="px-1 text-xs text-muted">
+                      Il ne pourra plus vous envoyer de messages. Bloquer cet utilisateur ?
+                    </p>
+                    <div class="mt-2 flex gap-2">
+                      <button
+                        type="submit"
+                        class="flex-1 cursor-pointer rounded-xl bg-brand px-3 py-2 text-xs font-bold text-white"
+                      >
+                        Bloquer
+                      </button>
+                      <button
+                        type="button"
+                        x-on:click="confirming = false"
+                        class="cursor-pointer rounded-xl px-3 py-2 text-xs font-semibold text-muted hover:bg-paper"
+                      >
+                        Annuler
+                      </button>
+                    </div>
+                  </div>
+                @end
+              @end
+            @end
             @form({
               route: 'conversations.destroy',
               routeParams: { id: activeId },
@@ -321,6 +383,29 @@
           role="alert"
           class="px-4 pt-3 text-sm font-medium text-brand"
         ></p>
+        {{-- Blocage : la bannière remplace la zone de saisie --}}
+        @if(blocks.byMe)
+          <div
+            class="flex flex-wrap items-center justify-between gap-3 bg-paper px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+          >
+            <p class="flex min-w-0 items-center gap-2 text-sm font-medium text-muted">
+              @svg('lucide:ban', { width: 16, height: 16, class: 'flex-none' })
+              <span>Vous avez bloqué {{ header.title }}.</span>
+            </p>
+            @form({
+              route: 'blocks.destroy',
+              routeParams: { userId: header.otherUserId },
+              method: 'POST',
+              class: 'flex-none',
+            })
+              @button({ type: 'submit', variant: 'secondary', size: 'sm' })
+                Débloquer
+              @end
+            @end
+          </div>
+        @end
+        {{-- La saisie reste dans la page (le JavaScript en a besoin), mais cachée si on a bloqué l'autre. Un utilisateur bloqué, lui, ne voit rien de différent. --}}
+        <div class="{{ blocks.byMe ? 'hidden' : '' }}">
         {{-- Aperçu des fichiers avant envoi --}}
         <div
           x-show="pendingFiles.length > 0"
@@ -453,7 +538,47 @@
             </span>
           </button>
         @end
+        </div>
       </div>
     </section>
   </div>
+
+  {{-- Venue d'un résultat de recherche : défile jusqu'au message et le surligne --}}
+  @if(focusId)
+    <script>
+      ;(() => {
+        const focusMessage = (highlight) => {
+          const element = document.getElementById('message-{{ focusId }}')
+          if (!element) {
+            return
+          }
+          /* On fait défiler uniquement la liste des messages (jamais la page entière,
+             sinon la zone de saisie remonte), avec le message au tiers de la hauteur. */
+          const list = element.closest('.overflow-y-auto')
+          if (list) {
+            const offset =
+              element.getBoundingClientRect().top - list.getBoundingClientRect().top
+            list.scrollTop += offset - list.clientHeight * 0.3
+          }
+          window.scrollTo(0, 0)
+          if (highlight) {
+            element.style.borderRadius = '1rem'
+            element.animate(
+              [{ backgroundColor: 'rgba(250, 204, 21, 0.45)' }, { backgroundColor: 'rgba(250, 204, 21, 0)' }],
+              { duration: 2600, easing: 'ease-out' }
+            )
+          }
+        }
+
+        /* Le script de la discussion descend en bas de page au démarrage : on revient au message juste après. */
+        setTimeout(() => focusMessage(false), 0)
+        setTimeout(() => focusMessage(false), 200)
+        setTimeout(() => focusMessage(true), 450)
+
+        /* Un rechargement de la page rouvre la discussion normalement. */
+        history.replaceState(null, '', window.location.pathname)
+      })()
+    </script>
+  @end
 @end
+

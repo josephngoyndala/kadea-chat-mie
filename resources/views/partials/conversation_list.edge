@@ -47,7 +47,7 @@
       <input
         type="search"
         x-model="search"
-        placeholder="Rechercher une discussion…"
+        placeholder="Rechercher une discussion ou un message…"
         class="h-9 w-full rounded-xl border border-line bg-paper/80 pl-9 pr-8 text-xs font-medium outline-none transition placeholder:text-muted focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/15"
       />
       <button
@@ -109,7 +109,7 @@
     <span class="grid size-12 place-items-center rounded-2xl bg-paper text-muted mb-2">
       @svg('lucide:search-x', { width: 22, height: 22 })
     </span>
-    <p class="text-sm font-semibold text-ink">Aucune discussion trouvée</p>
+    <p class="text-sm font-semibold text-ink">Aucune discussion à ce nom</p>
     <p class="text-xs text-muted mt-1">Essayez un autre mot clé ou filtre.</p>
   </div>
 
@@ -121,6 +121,111 @@
       @!conversationCard({ ...item, active: item.id === activeId })
     @end
   </ul>
+  {{-- Recherche d'un mot dans les messages de toutes les discussions (résultats sous la liste) --}}
+  <div
+    class="contents"
+    x-data="{
+      url: '{{ urlFor('messages.search') }}',
+      hits: [],
+      loading: false,
+      failed: false,
+      timer: null,
+      controller: null,
+      run(term) {
+        clearTimeout(this.timer)
+        if (this.controller) {
+          this.controller.abort()
+        }
+        const clean = term.trim()
+        if (clean.length < 2) {
+          this.hits = []
+          this.loading = false
+          this.failed = false
+          return
+        }
+        this.loading = true
+        this.timer = setTimeout(() => this.fetchHits(clean), 300)
+      },
+      async fetchHits(term) {
+        this.controller = new AbortController()
+        try {
+          const response = await fetch(this.url + '?q=' + encodeURIComponent(term), {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+            signal: this.controller.signal,
+          })
+          if (!response.ok) {
+            throw new Error('search')
+          }
+          this.hits = await response.json()
+          this.failed = false
+        } catch (error) {
+          if (error.name === 'AbortError') {
+            return
+          }
+          this.hits = []
+          this.failed = true
+        }
+        this.loading = false
+      },
+    }"
+    x-init="$watch('search', (term) => run(term))"
+  >
+    <div
+      x-show="search.trim().length >= 2"
+      x-cloak
+      class="flex min-h-0 flex-1 flex-col border-t border-line bg-white"
+    >
+      <p
+        class="flex flex-none items-center gap-2 bg-paper/70 px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-muted"
+      >
+        <span>Messages</span>
+        <span x-show="loading" x-cloak class="inline-flex animate-spin">
+          @svg('lucide:loader-circle', { width: 12, height: 12 })
+        </span>
+      </p>
+      <ul class="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
+        <template x-for="hit in hits" x-bind:key="hit.messageId">
+          <li>
+            <a
+              x-bind:href="hit.url"
+              class="flex items-start gap-3 px-4 py-3 transition hover:bg-paper active:bg-paper"
+            >
+              <span
+                class="grid size-10 flex-none place-items-center overflow-hidden rounded-full bg-brand-50 text-xs font-bold text-brand"
+              >
+                <template x-if="hit.avatarUrl">
+                  <img x-bind:src="hit.avatarUrl" alt="" class="size-full object-cover" />
+                </template>
+                <template x-if="!hit.avatarUrl">
+                  <span x-text="hit.initials"></span>
+                </template>
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="flex items-baseline justify-between gap-2">
+                  <span class="truncate text-sm font-bold text-ink" x-text="hit.title"></span>
+                  <span class="flex-none text-[11px] text-muted" x-text="hit.time"></span>
+                </span>
+                <span class="mt-0.5 line-clamp-2 break-words text-xs text-muted">
+                  <span x-show="hit.author" x-text="hit.author + ' : '"></span><span x-text="hit.before"></span><mark class="rounded bg-amber-200/80 px-0.5 font-semibold text-ink" x-text="hit.match"></mark><span x-text="hit.after"></span>
+                </span>
+              </span>
+            </a>
+          </li>
+        </template>
+      </ul>
+      <p
+        x-show="!loading && !failed && hits.length === 0"
+        x-cloak
+        class="px-4 py-6 text-center text-xs text-muted"
+      >
+        Aucun message ne contient ce mot.
+      </p>
+      <p x-show="failed" x-cloak role="alert" class="px-4 py-6 text-center text-xs text-brand">
+        La recherche a échoué. Réessayez.
+      </p>
+    </div>
+  </div>
   @if(!conversations.length)
     <div
       data-list-empty

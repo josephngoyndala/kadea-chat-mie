@@ -9,6 +9,7 @@
   'text-violet-600',
   'text-teal-600',
 ])
+@let(statusLabels = { sent: 'Envoyé', delivered: 'Reçu', read: 'Lu' })
 
 <div
   id="message-{{ message.id }}"
@@ -43,9 +44,7 @@
       @if(message.isDeleted)
         <p class="flex items-center gap-1.5 text-sm italic">
           @svg('lucide:ban', { width: 14, height: 14 })
-          
           Ce message a été supprimé
-
         </p>
       @else
         @if(message.body)
@@ -117,7 +116,7 @@
       @end
 
       <p
-        class="mt-1 text-right text-[11px] {{
+        class="mt-1 flex items-center justify-end gap-1 text-[11px] {{
           message.isDeleted
             ? 'text-muted'
             : message.isMine
@@ -125,7 +124,22 @@
               : 'text-muted'
         }}"
       >
-        {{ message.isEdited ? 'modifié · ' : '' }}{{ message.time }}
+        <span>{{ message.isEdited ? 'modifié · ' : '' }}{{ message.time }}</span>
+        {{-- Statut : un trait = envoyé, deux traits = reçu, deux traits bleus = lu --}}
+        @if(message.isMine && !message.isDeleted && message.status)
+          <span
+            data-message-status="{{ message.status }}"
+            title="{{ statusLabels[message.status] }}"
+            class="inline-flex items-center {{ message.status === 'read' ? 'text-sky-300' : 'text-white/70' }}"
+          >
+            @if(message.status === 'sent')
+              @svg('lucide:check', { width: 15, height: 15 })
+            @else
+              @svg('lucide:check-check', { width: 15, height: 15 })
+            @end
+            <span class="sr-only">{{ statusLabels[message.status] }}</span>
+          </span>
+        @end
       </p>
     </div>
     {{-- Éditeur : remplace la bulle pendant la modification --}}
@@ -181,9 +195,7 @@
           class="inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-muted transition hover:bg-white hover:text-ink"
         >
           @svg('lucide:pencil', { width: 15, height: 15 })
-          
           Modifier
-
         </button>
       @end
 
@@ -193,9 +205,7 @@
         class="inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-muted transition hover:bg-white hover:text-brand"
       >
         @svg('lucide:trash-2', { width: 15, height: 15 })
-        
         Supprimer
-
       </button>
     </div>
     {{-- Choix du type de suppression --}}

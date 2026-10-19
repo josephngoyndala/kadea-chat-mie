@@ -1,10 +1,12 @@
 import type Message from '#models/message'
+import BlockService from '#services/block_service'
 import ConversationPresenter from '#services/conversation_presenter'
 import ConversationService from '#services/conversation_service'
 import MessageAttachmentService, {
   MessageAttachmentError,
 } from '#services/message_attachment_service'
 import MessageService, { MessageNotEditableError } from '#services/message_service'
+import { isUserOnline } from '#services/presence'
 import RealtimeService from '#services/realtime_service'
 import {
   catchUpValidator,
@@ -22,6 +24,7 @@ import type { HttpContext } from '@adonisjs/core/http'
  * Chaque changement est annoncé en temps réel aux participants.
  */
 export default class MessagesController {
+  private blocks = new BlockService()
   private conversations = new ConversationService()
   private messages = new MessageService()
   private presenter = new ConversationPresenter()
@@ -43,7 +46,7 @@ export default class MessagesController {
       items.map(({ message, startsNewDay }) =>
         view.render('fragments/message', {
           conversationId: conversation.id,
-          ...this.presenter.fragment(message, user, startsNewDay, showAuthor),
+          ...this.presenter.fragment(message, user, startsNewDay, showAuthor, conversation.members),
         })
       )
     )
@@ -53,8 +56,9 @@ export default class MessagesController {
 
   /**
    * Une bulle de message pour l'utilisateur connecté, appelée quand un
-   * événement temps réel annonce un message nouveau ou modifié. Avec
-   * ?bare=1, sans séparateur de jour (pour remplacer une bulle existante).
+   * événement temps réel annonce un message nouveau ou modifié (ou dont le
+   * statut a changé). Avec ?bare=1, sans séparateur de jour (pour remplacer
+   * une bulle existante).
    */
   async show({ auth, params, request, response, view }: HttpContext) {
     const user = auth.getUserOrFail()
@@ -70,7 +74,8 @@ export default class MessagesController {
         message,
         user,
         startsNewDay,
-        this.presenter.showsAuthors(conversation)
+        this.presenter.showsAuthors(conversation),
+        conversation.members
       ),
     })
 
@@ -83,6 +88,21 @@ export default class MessagesController {
   async store({ auth, params, request, response, session, view }: HttpContext) {
     const user = auth.getUserOrFail()
     const conversation = await this.conversations.findForMember(user, Number(params.conversationId))
+
+    /**
+     * Celui qui a bloqué l'autre doit d'abord le débloquer pour lui écrire.
+     * L'utilisateur bloqué, lui, ne reçoit aucune erreur (voir plus bas).
+     */
+    const restriction = await this.blocks.restrictionFor(user, conversation)
+    if (restriction) {
+      if (this.wantsFragment(request)) {
+        return response.status(422).json({ errors: [{ message: restriction }] })
+      }
+
+      session.flash('error', restriction)
+      return response.redirect().toRoute('conversations.show', { id: conversation.id })
+    }
+
     const payload = await request.validateUsing(sendMessageValidator)
     const body = payload.body ?? ''
 
@@ -112,14 +132,57 @@ export default class MessagesController {
       return response.redirect().toRoute('conversations.show', { id: conversation.id })
     }
 
+    /**
+     * Si le destinataire a bloqué l'utilisateur, le message est enregistré
+     * comme d'habitude, mais jamais remis : l'auteur ne voit aucune erreur et
+     * son message reste à un seul trait.
+     */
+    const silencedFor = await this.blocks.silentRecipientFor(user, conversation)
+
     const { message, startsNewDay } = await this.messages.send(
       user,
       conversation,
       body,
-      attachments
+      attachments,
+      silencedFor
     )
-    await this.conversations.markAsRead(conversation.id, user.id)
-    this.realtime.messageCreated(conversation, message)
+
+    /**
+     * Les membres déjà en ligne reçoivent le message tout de suite : il
+     * passe à « reçu » (deux traits gris). Les autres le recevront à leur
+     * prochaine connexion. Un message silencieux n'est jamais remis.
+     */
+    if (!silencedFor) {
+      const onlineRecipientIds = conversation.members
+        .filter((member) => member.userId !== user.id && isUserOnline(member.user))
+        .map((member) => member.userId)
+      await this.conversations.markDeliveredFor(conversation.id, onlineRecipientIds, message.id)
+    }
+
+    /**
+     * Répondre dans une conversation, c'est avoir lu ce qui précède : les
+     * messages des autres passent à « lu » chez eux.
+     */
+    const readIds = await this.conversations.markAsRead(conversation.id, user.id)
+
+    /**
+     * Les pointeurs ont changé : on recharge les membres pour que la bulle
+     * renvoyée affiche le bon statut.
+     */
+    await conversation.load('members', (members) => {
+      members.preload('user')
+    })
+
+    if (silencedFor) {
+      /**
+       * Seule la liste de l'auteur est rafraîchie : le destinataire n'est
+       * prévenu de rien.
+       */
+      this.realtime.conversationUpdatedForUser(conversation.id, user.id)
+    } else {
+      this.realtime.messageCreated(conversation, message)
+    }
+    this.realtime.statusChanged(conversation.id, readIds)
 
     if (!this.wantsFragment(request)) {
       return response.redirect().toRoute('conversations.show', { id: conversation.id })
@@ -131,7 +194,8 @@ export default class MessagesController {
         message,
         user,
         startsNewDay,
-        this.presenter.showsAuthors(conversation)
+        this.presenter.showsAuthors(conversation),
+        conversation.members
       ),
     })
 
@@ -161,7 +225,9 @@ export default class MessagesController {
       throw error
     }
 
-    this.realtime.messageUpdated(conversation, message)
+    if (!message.silencedAt) {
+      this.realtime.messageUpdated(conversation, message)
+    }
 
     if (!this.wantsFragment(request)) {
       return response.redirect().toRoute('conversations.show', { id: conversation.id })
@@ -169,7 +235,13 @@ export default class MessagesController {
 
     const html = await view.render('fragments/message', {
       conversationId: conversation.id,
-      ...this.presenter.fragment(message, user, false, this.presenter.showsAuthors(conversation)),
+      ...this.presenter.fragment(
+        message,
+        user,
+        false,
+        this.presenter.showsAuthors(conversation),
+        conversation.members
+      ),
     })
 
     return response.type('html').send(html)
@@ -195,7 +267,9 @@ export default class MessagesController {
     }
 
     const message = await this.messages.deleteForEveryone(user, conversation.id, messageId)
-    this.realtime.messageUpdated(conversation, message)
+    if (!message.silencedAt) {
+      this.realtime.messageUpdated(conversation, message)
+    }
 
     if (!this.wantsFragment(request)) {
       return response.redirect().toRoute('conversations.show', { id: conversation.id })
@@ -203,7 +277,13 @@ export default class MessagesController {
 
     const html = await view.render('fragments/message', {
       conversationId: conversation.id,
-      ...this.presenter.fragment(message, user, false, this.presenter.showsAuthors(conversation)),
+      ...this.presenter.fragment(
+        message,
+        user,
+        false,
+        this.presenter.showsAuthors(conversation),
+        conversation.members
+      ),
     })
 
     return response.type('html').send(html)

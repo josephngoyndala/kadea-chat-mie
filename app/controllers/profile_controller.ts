@@ -1,5 +1,7 @@
 import hash from '@adonisjs/core/services/hash'
 import AvatarService from '#services/avatar_service'
+import BlockService from '#services/block_service'
+import UserPresenter from '#services/user_presenter'
 import {
   updateAvatarValidator,
   updatePasswordValidator,
@@ -8,18 +10,22 @@ import {
 import type { HttpContext } from '@adonisjs/core/http'
 
 /**
- * ProfileController gère la page de profil : nom, photo et mot de passe de
- * l'utilisateur connecté.
+ * ProfileController gère la page de profil : nom, photo, mot de passe et
+ * utilisateurs bloqués de l'utilisateur connecté.
  */
 export default class ProfileController {
   private avatars = new AvatarService()
+  private blocks = new BlockService()
+  private users = new UserPresenter()
 
   /**
    * Affiche la page de profil
    */
   async show({ auth, view }: HttpContext) {
     const user = auth.getUserOrFail()
-    return view.render('pages/profile/show', { user })
+    const blockedUsers = await this.users.directory(await this.blocks.blockedUsersOf(user))
+
+    return view.render('pages/profile/show', { user, blockedUsers })
   }
 
   /**

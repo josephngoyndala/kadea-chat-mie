@@ -4,10 +4,12 @@
  */
 
 export const controllers = {
+  Blocks: () => import('#controllers/blocks_controller'),
   Conversations: () => import('#controllers/conversations_controller'),
   EmailVerification: () => import('#controllers/email_verification_controller'),
   GroupMembers: () => import('#controllers/group_members_controller'),
   Groups: () => import('#controllers/groups_controller'),
+  MessageSearch: () => import('#controllers/message_search_controller'),
   Messages: () => import('#controllers/messages_controller'),
   NewAccount: () => import('#controllers/new_account_controller'),
   PasswordReset: () => import('#controllers/password_reset_controller'),

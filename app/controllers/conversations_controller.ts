@@ -1,3 +1,5 @@
+import type User from '#models/user'
+import BlockService from '#services/block_service'
 import ConversationPresenter from '#services/conversation_presenter'
 import ConversationService from '#services/conversation_service'
 import RealtimeService from '#services/realtime_service'
@@ -9,6 +11,7 @@ import type { HttpContext } from '@adonisjs/core/http'
  * liste, ouverture d'une conversation et démarrage d'une conversation privée.
  */
 export default class ConversationsController {
+  private blocks = new BlockService()
   private conversations = new ConversationService()
   private presenter = new ConversationPresenter()
   private realtime = new RealtimeService()
@@ -18,6 +21,8 @@ export default class ConversationsController {
    */
   async index({ auth, view }: HttpContext) {
     const user = auth.getUserOrFail()
+
+    await this.deliverPending(user)
 
     const items = await this.conversations.listFor(user)
 
@@ -30,26 +35,57 @@ export default class ConversationsController {
    * Ouvre une conversation et affiche son historique. Répond « introuvable »
    * si l'utilisateur n'en est pas membre.
    */
-  async show({ auth, params, view }: HttpContext) {
+  async show({ auth, params, request, view }: HttpContext) {
     const user = auth.getUserOrFail()
     const conversationId = Number(params.id)
 
     const conversation = await this.conversations.findForMember(user, conversationId)
-    await this.conversations.markAsRead(conversation.id, user.id)
+
+    /**
+     * Ouvrir la conversation : ses messages sont lus (traits bleus chez
+     * leurs auteurs). Les messages en attente dans les autres conversations
+     * sont, eux, marqués comme reçus.
+     */
+    const readIds = await this.conversations.markAsRead(conversation.id, user.id)
+    this.realtime.statusChanged(conversation.id, readIds)
+    await this.deliverPending(user)
+
+    /**
+     * Venant d'un résultat de recherche (?message=12), l'historique est centré
+     * sur le message trouvé ; la page défile jusqu'à lui et le met en évidence.
+     */
+    const requested = Number.parseInt(String(request.qs().message ?? ''), 10)
+    const around =
+      Number.isInteger(requested) && requested > 0
+        ? await this.conversations.historyAround(conversation, user, requested)
+        : null
 
     const [items, messages] = await Promise.all([
       this.conversations.listFor(user),
-      this.conversations.history(conversation, user),
+      around ?? this.conversations.history(conversation, user),
     ])
+
+    const header = await this.presenter.header(conversation, user)
+
+    /**
+     * Dans une conversation privée, qui a bloqué qui : la page remplace la
+     * zone de saisie par une bannière et propose « Bloquer » ou « Débloquer ».
+     */
+    const blocks = header.otherUserId
+      ? await this.blocks.stateBetween(user.id, header.otherUserId)
+      : { byMe: false, byThem: false }
 
     return view.render('pages/conversations/show', {
       activeId: conversation.id,
+      focusId: around ? requested : null,
       conversations: await this.presenter.cards(items, user),
-      header: await this.presenter.header(conversation, user),
+      header,
+      blocks,
       groups: this.presenter.groupMessages(
         messages,
         user,
-        this.presenter.showsAuthors(conversation)
+        this.presenter.showsAuthors(conversation),
+        conversation.members
       ),
     })
   }
@@ -58,6 +94,10 @@ export default class ConversationsController {
    * Renvoie la carte d'une conversation (morceau de HTML) pour rafraîchir la
    * liste en temps réel. Si l'utilisateur n'est plus membre, la réponse est
    * « introuvable » et sa liste retire la carte.
+   *
+   * Si cette requête arrive, c'est que le navigateur du membre est connecté :
+   * les nouveaux messages lui sont donc bien arrivés (« reçus »), et « lus »
+   * s'il regarde justement cette conversation.
    */
   async card({ auth, params, request, view }: HttpContext) {
     const user = auth.getUserOrFail()
@@ -66,9 +106,10 @@ export default class ConversationsController {
     const conversation = await this.conversations.findForMember(user, conversationId)
     const isActive = conversation.id === Number(request.input('active'))
 
-    if (isActive) {
-      await this.conversations.markAsRead(conversation.id, user.id)
-    }
+    const changedIds = isActive
+      ? await this.conversations.markAsRead(conversation.id, user.id)
+      : await this.conversations.markAsDelivered(conversation.id, user.id)
+    this.realtime.statusChanged(conversation.id, changedIds)
 
     const lastMessage = await this.conversations.lastMessageOf(conversation, user)
     const unreadMap = await this.conversations.unreadCountsFor([conversation.id], user)
@@ -90,7 +131,8 @@ export default class ConversationsController {
     const conversationId = Number(params.id)
 
     const conversation = await this.conversations.findForMember(user, conversationId)
-    await this.conversations.markAsRead(conversation.id, user.id)
+    const readIds = await this.conversations.markAsRead(conversation.id, user.id)
+    this.realtime.statusChanged(conversation.id, readIds)
 
     return response.noContent()
   }
@@ -107,7 +149,16 @@ export default class ConversationsController {
       return response.forbidden()
     }
 
-    this.realtime.userTyping(conversationId, user)
+    /**
+     * Entre deux utilisateurs dont l'un a bloqué l'autre, le signal n'est pas
+     * diffusé : celui qui a bloqué ne voit pas l'autre écrire, et rien ne
+     * signale à l'autre qu'il est bloqué (la réponse reste la même).
+     */
+    const conversation = await this.conversations.findForMember(user, conversationId)
+    const isBlocked = await this.blocks.isBlockedInConversation(user, conversation)
+    if (!isBlocked) {
+      this.realtime.userTyping(conversationId, user)
+    }
 
     return response.noContent()
   }
@@ -146,6 +197,11 @@ export default class ConversationsController {
       return response.redirect().toRoute('users.index')
     }
 
+    /**
+     * Même bloqué, l'utilisateur peut ouvrir la discussion, sans erreur ni
+     * indication : ses messages ne seront simplement jamais remis. Celui qui a
+     * bloqué voit, lui, la bannière « Vous avez bloqué… » dans la discussion.
+     */
     const conversation = await this.conversations.startPrivate(user, userId)
 
     return response.redirect().toRoute('conversations.show', { id: conversation.id })
@@ -166,5 +222,17 @@ export default class ConversationsController {
 
     session.flash('success', 'La discussion a été supprimée de votre liste.')
     return response.redirect().toRoute('dashboard')
+  }
+
+  /**
+   * L'utilisateur est connecté : les messages qui l'attendaient dans toutes
+   * ses conversations passent à « reçus », et leurs auteurs en sont prévenus.
+   */
+  private async deliverPending(user: User) {
+    const changes = await this.conversations.markAllAsDelivered(user.id)
+
+    for (const [conversationId, messageIds] of changes) {
+      this.realtime.statusChanged(conversationId, messageIds)
+    }
   }
 }
