@@ -108,7 +108,8 @@ export default class MessageAttachmentService {
           messageId: message.id,
           originalName: file.clientName,
           storagePath: key,
-          mimeType: file.type ?? 'application/octet-stream',
+          mimeType:
+            file.type && file.subtype ? `${file.type}/${file.subtype}` : 'application/octet-stream',
           sizeBytes: file.size,
         },
         trx ? { client: trx } : undefined

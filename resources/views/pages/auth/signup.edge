@@ -68,24 +68,27 @@
     @end
     @button({ type: 'submit', block: true, 'x-bind:disabled': 'submitting' })
       <span x-show="!submitting" class="inline-flex items-center gap-2">
-        
         Créer mon compte
-
         @svg('lucide:chevron-right', { width: 18, height: 18 })
       </span>
       <span x-show="submitting" x-cloak class="inline-flex items-center gap-2">
         @svg('lucide:loader-circle', { width: 18, height: 18, class: 'animate-spin' })
-        
         Création du compte…
-
       </span>
     @end
   @end
 
-  <p class="mt-8 text-center text-sm text-muted">
-    
-    Vous avez déjà un compte ?
+  <div class="mt-6 flex items-center gap-3 text-xs font-semibold uppercase text-muted">
+    <span class="h-px flex-1 bg-line"></span>
+    ou
+    <span class="h-px flex-1 bg-line"></span>
+  </div>
+  <div class="mt-6">
+    @!googleButton()
+  </div>
 
+  <p class="mt-8 text-center text-sm text-muted">
+    Vous avez déjà un compte ?
     @link({ route: 'session.create', class: 'font-bold text-brand hover:underline' })
       Se connecter
     @end

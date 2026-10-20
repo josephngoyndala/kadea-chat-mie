@@ -68,6 +68,40 @@ document.addEventListener('click', (event) => {
 })
 
 /**
+ * Téléchargement d'une pièce jointe : tout élément portant l'attribut
+ * data-download-url télécharge le fichier sous son nom d'origine. Si le
+ * navigateur ne peut pas le récupérer, le fichier s'ouvre dans un nouvel onglet.
+ */
+document.addEventListener('click', async (event) => {
+  const trigger =
+    event.target instanceof Element ? event.target.closest('[data-download-url]') : null
+  if (!trigger) {
+    return
+  }
+
+  event.preventDefault()
+  const url = trigger.dataset.downloadUrl
+  const name = trigger.dataset.downloadName || 'fichier'
+
+  try {
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error('download')
+    }
+
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(await response.blob())
+    link.download = name
+    document.body.append(link)
+    link.click()
+    link.remove()
+    setTimeout(() => URL.revokeObjectURL(link.href), 10000)
+  } catch {
+    window.open(url, '_blank', 'noopener')
+  }
+})
+
+/**
  * Appel au serveur utilisé par la messagerie : le serveur répond par le
  * morceau de HTML à insérer dans la page.
  */

@@ -19,113 +19,172 @@
   class="flex {{ message.isMine ? 'justify-end' : 'justify-start' }}"
 >
   <div
-    class="flex max-w-[85%] flex-col sm:max-w-[70%] {{ message.isMine ? 'items-end' : 'items-start' }}"
+    class="flex min-w-0 max-w-[85%] flex-col sm:max-w-[70%] {{ message.isMine ? 'items-end' : 'items-start' }}"
   >
-    {{-- La bulle : un appui ouvre le menu d'actions --}}
-    <div
-      x-show="mode !== 'edit'"
-      role="button"
-      tabindex="0"
-      x-on:click="toggle()"
-      x-on:keydown.enter="toggle()"
-      class="cursor-pointer rounded-2xl px-3.5 py-1.5 {{
-        message.isDeleted
-          ? 'border border-dashed border-line text-muted'
-          : message.isMine
-            ? 'rounded-br-md bg-brand text-white'
-            : 'rounded-bl-md bg-white text-ink shadow-card'
-      }}"
-    >
-      @if(message.authorName && !message.isDeleted)
-        <p class="mb-0.5 text-xs font-bold {{ authorColors[message.authorColor] }}">
-          {{ message.authorName }}
-        </p>
-      @end
-      @if(message.isDeleted)
-        <p class="flex items-center gap-1.5 text-sm italic">
-          @svg('lucide:ban', { width: 14, height: 14 })
-          Ce message a été supprimé
-        </p>
-      @else
-        @if(message.body)
-          <p data-message-body class="whitespace-pre-wrap text-[15px] leading-snug [overflow-wrap:anywhere]">{{ message.body }}</p>
+    {{-- Pièces jointes : hors de la bulle, ouverture au clic et téléchargement --}}
+    @if(!message.isDeleted && message.attachments?.length)
+      <div
+        class="flex min-w-0 max-w-full flex-col gap-1.5 {{ message.isMine ? 'items-end' : 'items-start' }}"
+      >
+        @if(message.authorName && !message.body)
+          <p class="px-1 text-xs font-bold {{ authorColors[message.authorColor] }}">
+            {{ message.authorName }}
+          </p>
         @end
-        @if(message.attachments?.length)
-          <div class="{{ message.body ? 'mt-2' : '' }} flex flex-col gap-2">
-            @each(file in message.attachments)
-              @let(fileUrl = await driveUrl(file.storagePath))
-              @if(file.isImage)
-                <button
-                  type="button"
-                  data-zoom-src="{{ fileUrl }}"
-                  data-zoom-alt="{{ file.originalName }}"
-                  x-on:click.stop
-                  class="block max-w-full overflow-hidden rounded-xl {{
-                    message.isMine
-                      ? 'ring-1 ring-white/30'
-                      : 'ring-1 ring-line'
-                  }}"
-                >
-                  <img
-                    src="{{ fileUrl }}"
-                    alt="{{ file.originalName }}"
-                    class="max-h-64 w-full object-cover"
-                    loading="lazy"
-                  />
-                </button>
-              @elseif(file.isVideo)
-                <video
-                  x-on:click.stop
-                  controls
-                  playsinline
-                  preload="metadata"
-                  class="max-h-72 w-full rounded-xl {{
-                    message.isMine
-                      ? 'ring-1 ring-white/30'
-                      : 'ring-1 ring-line'
-                  }}"
-                >
-                  <source src="{{ fileUrl }}" type="{{ file.mimeType }}" />
-                </video>
-              @else
-                <a
-                  href="{{ fileUrl }}"
-                  download="{{ file.originalName }}"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  x-on:click.stop
-                  class="flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm {{
-                    message.isMine
-                      ? 'border-white/30 bg-white/10 hover:bg-white/15'
-                      : 'border-line bg-paper hover:bg-white'
-                  }}"
-                >
-                  @svg('lucide:paperclip', { width: 16, height: 16 })
-                  <span class="min-w-0 flex-1 truncate font-semibold">{{ file.originalName }}</span>
-                  <span class="text-xs opacity-80">{{ file.sizeLabel }}</span>
-                </a>
-              @end
-            @end
-          </div>
+        @each(file in message.attachments)
+          @let(fileUrl = await driveUrl(file.storagePath))
+          @if(file.isImage)
+            <div
+              class="relative w-72 max-w-full overflow-hidden rounded-2xl bg-white shadow-card ring-1 ring-line sm:w-80"
+            >
+              <button
+                type="button"
+                data-zoom-src="{{ fileUrl }}"
+                data-zoom-alt="{{ file.originalName }}"
+                aria-label="Agrandir la photo {{ file.originalName }}"
+                class="block w-full cursor-zoom-in"
+              >
+                <img
+                  src="{{ fileUrl }}"
+                  alt="{{ file.originalName }}"
+                  class="h-auto max-h-80 w-full object-cover"
+                  loading="lazy"
+                />
+              </button>
+              <button
+                type="button"
+                data-download-url="{{ fileUrl }}"
+                data-download-name="{{ file.originalName }}"
+                aria-label="Télécharger la photo"
+                title="Télécharger"
+                class="absolute right-2 top-2 grid size-9 cursor-pointer place-items-center rounded-full bg-black/55 text-white backdrop-blur transition hover:bg-black/75 active:scale-95"
+              >
+                @svg('lucide:download', { width: 17, height: 17 })
+              </button>
+            </div>
+          @elseif(file.isVideo)
+            <div
+              class="relative w-72 max-w-full overflow-hidden rounded-2xl bg-black shadow-card ring-1 ring-line sm:w-80"
+            >
+              <video controls playsinline preload="metadata" class="max-h-80 w-full">
+                <source src="{{ fileUrl }}" type="{{ file.mimeType }}" />
+              </video>
+              <button
+                type="button"
+                data-download-url="{{ fileUrl }}"
+                data-download-name="{{ file.originalName }}"
+                aria-label="Télécharger la vidéo"
+                title="Télécharger"
+                class="absolute right-2 top-2 grid size-9 cursor-pointer place-items-center rounded-full bg-black/55 text-white backdrop-blur transition hover:bg-black/75 active:scale-95"
+              >
+                @svg('lucide:download', { width: 17, height: 17 })
+              </button>
+            </div>
+          @else
+            <div
+              class="flex w-72 max-w-full items-center gap-3 rounded-2xl border border-line bg-white px-3 py-2.5 text-ink shadow-card sm:w-80"
+            >
+              <span
+                class="grid size-10 flex-none place-items-center rounded-xl bg-brand-50 text-brand"
+              >
+                @svg('lucide:file-text', { width: 20, height: 20 })
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-sm font-semibold">{{ file.originalName }}</span>
+                <span class="block text-xs text-muted">{{ file.sizeLabel }}</span>
+              </span>
+              <a
+                href="{{ fileUrl }}"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Ouvrir le fichier"
+                title="Ouvrir"
+                class="grid size-9 flex-none place-items-center rounded-full text-muted transition hover:bg-paper hover:text-ink"
+              >
+                @svg('lucide:external-link', { width: 17, height: 17 })
+              </a>
+              <button
+                type="button"
+                data-download-url="{{ fileUrl }}"
+                data-download-name="{{ file.originalName }}"
+                aria-label="Télécharger le fichier"
+                title="Télécharger"
+                class="grid size-9 flex-none cursor-pointer place-items-center rounded-full bg-brand-50 text-brand transition hover:bg-brand hover:text-white"
+              >
+                @svg('lucide:download', { width: 17, height: 17 })
+              </button>
+            </div>
+          @end
         @end
-      @end
+      </div>
+    @end
 
-      <p
-        class="mt-0.5 flex items-center justify-end gap-1 text-[11px] leading-none {{
+    @if(message.isDeleted || message.body)
+      {{-- La bulle du texte : un appui ouvre le menu d'actions --}}
+      <div
+        x-show="mode !== 'edit'"
+        role="button"
+        tabindex="0"
+        x-on:click="toggle()"
+        x-on:keydown.enter="toggle()"
+        class="min-w-0 max-w-full cursor-pointer rounded-2xl px-3.5 py-1.5 {{ message.attachments?.length && !message.isDeleted ? 'mt-1.5' : '' }} {{
           message.isDeleted
-            ? 'text-muted'
+            ? 'border border-dashed border-line text-muted'
             : message.isMine
-              ? 'text-white/70'
-              : 'text-muted'
+              ? 'rounded-br-md bg-brand text-white'
+              : 'rounded-bl-md bg-white text-ink shadow-card'
         }}"
       >
-        <span>{{ message.isEdited ? 'modifié · ' : '' }}{{ message.time }}</span>
-        {{-- Statut : un trait = envoyé, deux traits = reçu, deux traits bleus = lu --}}
-        @if(message.isMine && !message.isDeleted && message.status)
+        @if(message.authorName && !message.isDeleted)
+          <p class="mb-0.5 text-xs font-bold {{ authorColors[message.authorColor] }}">
+            {{ message.authorName }}
+          </p>
+        @end
+        @if(message.isDeleted)
+          <p class="flex items-center gap-1.5 text-sm italic">
+            @svg('lucide:ban', { width: 14, height: 14 })
+            Ce message a été supprimé
+          </p>
+        @else
+          <p data-message-body class="whitespace-pre-wrap text-[15px] leading-snug [overflow-wrap:anywhere]">{{ message.body }}</p>
+        @end
+
+        <p
+          class="mt-0.5 flex items-center justify-end gap-1 text-[11px] leading-none {{
+            message.isDeleted
+              ? 'text-muted'
+              : message.isMine
+                ? 'text-white/70'
+                : 'text-muted'
+          }}"
+        >
+          <span>{{ message.isEdited ? 'modifié · ' : '' }}{{ message.time }}</span>
+          {{-- Statut : un trait = envoyé, deux traits = reçu, deux traits bleus = lu --}}
+          @if(message.isMine && !message.isDeleted && message.status)
+            <span
+              data-message-status="{{ message.status }}"
+              title="{{ statusLabels[message.status] }}"
+              class="inline-flex items-center {{ message.status === 'read' ? 'text-sky-300' : 'text-white/70' }}"
+            >
+              @if(message.status === 'sent')
+                @svg('lucide:check', { width: 15, height: 15 })
+              @else
+                @svg('lucide:check-check', { width: 15, height: 15 })
+              @end
+              <span class="sr-only">{{ statusLabels[message.status] }}</span>
+            </span>
+          @end
+        </p>
+      </div>
+    @else
+      {{-- Pièces jointes seules : l'heure, le statut et le menu d'actions sous les fichiers --}}
+      <div class="mt-1 flex items-center gap-1.5 px-1 text-[11px] leading-none text-muted">
+        <span>{{ message.time }}</span>
+        @if(message.isMine && message.status)
           <span
             data-message-status="{{ message.status }}"
             title="{{ statusLabels[message.status] }}"
-            class="inline-flex items-center {{ message.status === 'read' ? 'text-sky-300' : 'text-white/70' }}"
+            class="inline-flex items-center {{ message.status === 'read' ? 'text-sky-500' : 'text-muted' }}"
           >
             @if(message.status === 'sent')
               @svg('lucide:check', { width: 15, height: 15 })
@@ -135,8 +194,17 @@
             <span class="sr-only">{{ statusLabels[message.status] }}</span>
           </span>
         @end
-      </p>
-    </div>
+        <button
+          type="button"
+          x-on:click="toggle()"
+          aria-label="Options du message"
+          title="Options"
+          class="grid size-6 cursor-pointer place-items-center rounded-full text-muted transition hover:bg-white hover:text-ink"
+        >
+          @svg('lucide:ellipsis', { width: 15, height: 15 })
+        </button>
+      </div>
+    @end
     {{-- Éditeur : remplace la bulle pendant la modification --}}
     @if(message.canEdit)
       <div x-show="mode === 'edit'" x-cloak class="w-[min(80vw,28rem)]">

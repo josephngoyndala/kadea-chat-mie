@@ -58,6 +58,7 @@ export default defineConfig({
     () => import('@adonisjs/drive/drive_provider'),
     () => import('@adonisjs/transmit/transmit_provider'),
     () => import('@adonisjs/limiter/limiter_provider'),
+    () => import('@adonisjs/ally/ally_provider')
   ],
 
   /*
