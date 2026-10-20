@@ -31,6 +31,18 @@ router
     router.get('login', [controllers.Session, 'create'])
     router.post('login', [controllers.Session, 'store']).use(sensitiveThrottle)
 
+    router
+      .get('auth/google/redirect', [
+        () => import('#controllers/google_auth_controller'),
+        'redirect',
+      ])
+      .as('google.redirect')
+    router
+      .get('auth/google/callback', [
+        () => import('#controllers/google_auth_controller'),
+        'callback',
+      ])
+      .as('google.callback')
     router.get('email/verification', [controllers.EmailVerification, 'notice'])
     router.get('email/verify/:token', [controllers.EmailVerification, 'verify'])
     router
