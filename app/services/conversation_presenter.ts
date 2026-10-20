@@ -5,6 +5,7 @@ import type User from '#models/user'
 import AvatarService from '#services/avatar_service'
 import BlockService from '#services/block_service'
 import type { ConversationWithLastMessage } from '#services/conversation_service'
+import { attachmentKind, attachmentMimeType } from '#services/attachment_kind'
 import { dayKey, formatDayLabel, formatListDate, formatMessageTime } from '#services/date_formatter'
 import { isWithinEditWindow } from '#services/message_rules'
 import type { MessageHit } from '#services/message_search_service'
@@ -376,8 +377,8 @@ export default class ConversationPresenter {
 
     let text = (message.body ?? '').replace(/\s+/g, ' ').trim()
     if (!text && message.attachments && message.attachments.length > 0) {
-      const hasVideo = message.attachments.some((file) => file.mimeType.startsWith('video/'))
-      const hasImage = message.attachments.some((file) => file.mimeType.startsWith('image/'))
+      const hasVideo = message.attachments.some((file) => attachmentKind(file) === 'video')
+      const hasImage = message.attachments.some((file) => attachmentKind(file) === 'image')
       if (hasVideo) {
         text = '🎬 Vidéo'
       } else if (hasImage) {
@@ -433,9 +434,9 @@ export default class ConversationPresenter {
       id: file.id,
       originalName: file.originalName,
       storagePath: file.storagePath,
-      mimeType: file.mimeType,
-      isImage: file.mimeType.startsWith('image/'),
-      isVideo: file.mimeType.startsWith('video/'),
+      mimeType: attachmentMimeType(file),
+      isImage: attachmentKind(file) === 'image',
+      isVideo: attachmentKind(file) === 'video',
       sizeLabel: this.formatFileSize(file.sizeBytes),
     }))
   }
