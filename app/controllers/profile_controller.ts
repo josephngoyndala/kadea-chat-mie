@@ -68,11 +68,20 @@ export default class ProfileController {
   }
 
   /**
-   * Change le mot de passe, après avoir vérifié l'ancien
+   * Change le mot de passe, après avoir vérifié l'ancien. Un compte créé
+   * avec Google n'a pas de mot de passe : il n'y a rien à modifier.
    */
   async updatePassword({ auth, request, session, response }: HttpContext) {
     const user = auth.getUserOrFail()
     const { currentPassword, password } = await request.validateUsing(updatePasswordValidator)
+
+    if (!user.password) {
+      session.flash(
+        'error',
+        'Votre compte utilise la connexion Google : il n’a pas de mot de passe à modifier.'
+      )
+      return response.redirect().back()
+    }
 
     const isCurrentPasswordValid = await hash.verify(user.password, currentPassword)
     if (!isCurrentPasswordValid) {
