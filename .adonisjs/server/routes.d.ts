@@ -13,6 +13,8 @@ export type ScannedRoutes = {
     'new_account.store': { paramsTuple?: []; params?: {} }
     'session.create': { paramsTuple?: []; params?: {} }
     'session.store': { paramsTuple?: []; params?: {} }
+    'google.redirect': { paramsTuple?: []; params?: {} }
+    'google.callback': { paramsTuple?: []; params?: {} }
     'email_verification.notice': { paramsTuple?: []; params?: {} }
     'email_verification.verify': { paramsTuple: [ParamValue]; params: {'token': ParamValue} }
     'email_verification.resend': { paramsTuple?: []; params?: {} }
@@ -58,6 +60,8 @@ export type ScannedRoutes = {
     'home': { paramsTuple?: []; params?: {} }
     'new_account.create': { paramsTuple?: []; params?: {} }
     'session.create': { paramsTuple?: []; params?: {} }
+    'google.redirect': { paramsTuple?: []; params?: {} }
+    'google.callback': { paramsTuple?: []; params?: {} }
     'email_verification.notice': { paramsTuple?: []; params?: {} }
     'email_verification.verify': { paramsTuple: [ParamValue]; params: {'token': ParamValue} }
     'password_reset.create': { paramsTuple?: []; params?: {} }
@@ -80,6 +84,8 @@ export type ScannedRoutes = {
     'home': { paramsTuple?: []; params?: {} }
     'new_account.create': { paramsTuple?: []; params?: {} }
     'session.create': { paramsTuple?: []; params?: {} }
+    'google.redirect': { paramsTuple?: []; params?: {} }
+    'google.callback': { paramsTuple?: []; params?: {} }
     'email_verification.notice': { paramsTuple?: []; params?: {} }
     'email_verification.verify': { paramsTuple: [ParamValue]; params: {'token': ParamValue} }
     'password_reset.create': { paramsTuple?: []; params?: {} }

@@ -119,6 +119,16 @@ export default class SessionController {
       },
     ])
 
+    const existing = await User.findBy('email', email)
+    if (existing && !existing.password) {
+      session.flashOnly(['email'])
+      session.flash(
+        'error',
+        'Ce compte utilise la connexion Google. Cliquez sur « Continuer avec Google ».'
+      )
+      return null
+    }
+
     try {
       /**
        * Si les identifiants sont faux, penalize consomme une tentative puis
