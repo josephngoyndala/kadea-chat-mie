@@ -59,6 +59,7 @@
     "youch": "^4.1.1"
   },
   "dependencies": {
+    "@adonisjs/ally": "^6.3.2",
     "@adonisjs/auth": "^10.1.0",
     "@adonisjs/core": "^7.5.2",
     "@adonisjs/drive": "^4.0.0",
@@ -71,6 +72,8 @@
     "@adonisjs/transmit": "^3.0.2",
     "@adonisjs/transmit-client": "^1.1.0",
     "@adonisjs/vite": "^6.0.2",
+    "@aws-sdk/client-s3": "^3.1152.0",
+    "@aws-sdk/s3-request-presigner": "^3.1152.0",
     "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
     "@tailwindcss/vite": "^4.3.3",
     "@vinejs/vine": "^4.4.0",

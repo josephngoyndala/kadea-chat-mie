@@ -2,10 +2,17 @@ import vine from '@vinejs/vine'
 import { frenchMessages } from '#validators/shared/french_messages'
 
 /**
- * Validateur de l'envoi et de la modification d'un message : un texte non
- * vide, 2000 caractères au maximum.
+ * Validateur du texte d'un message. Les pièces jointes sont validées à part
+ * pour éviter qu'un champ fichier vide du formulaire ne bloque l'envoi.
  */
 export const sendMessageValidator = vine.create({
+  body: vine.string().trim().maxLength(2000).optional(),
+})
+
+/**
+ * Validateur de la modification d'un message : texte non vide uniquement.
+ */
+export const editMessageValidator = vine.create({
   body: vine.string().trim().minLength(1).maxLength(2000),
 })
 
@@ -26,5 +33,6 @@ export const catchUpValidator = vine.create({
 })
 
 sendMessageValidator.messagesProvider = frenchMessages()
+editMessageValidator.messagesProvider = frenchMessages()
 deleteMessageValidator.messagesProvider = frenchMessages()
 catchUpValidator.messagesProvider = frenchMessages()

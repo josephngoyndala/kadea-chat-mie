@@ -17,6 +17,18 @@ export type ConversationWithLastMessage = {
 const HISTORY_LIMIT = 100
 
 /**
+ * Messages chargés avant et après un message retrouvé par la recherche.
+ */
+const CONTEXT_BEFORE = 30
+const CONTEXT_AFTER = 200
+
+/**
+ * Nombre maximum de messages dont on annonce le changement de statut
+ * (reçu / lu) en une seule fois.
+ */
+const STATUS_CHANGE_LIMIT = 30
+
+/**
  * Règles métier des conversations : liste, accès, historique, création.
  */
 export default class ConversationService {
@@ -109,10 +121,49 @@ export default class ConversationService {
       .where('conversation_id', conversation.id)
       .whereRaw(NOT_HIDDEN_FOR_USER, [viewer.id])
       .preload('sender')
+      .preload('attachments')
       .orderBy('id', 'desc')
       .limit(HISTORY_LIMIT)
 
     return messages.reverse()
+  }
+
+  /**
+   * Historique centré sur un message précis (résultat de recherche) : quelques
+   * messages avant lui, lui-même, puis ceux qui suivent. Renvoie null si le
+   * message n'existe pas dans cette conversation ou est masqué pour
+   * l'utilisateur : la page affiche alors l'historique habituel.
+   */
+  async historyAround(conversation: Conversation, viewer: User, messageId: number) {
+    const target = await Message.query()
+      .where('id', messageId)
+      .where('conversation_id', conversation.id)
+      .whereRaw(NOT_HIDDEN_FOR_USER, [viewer.id])
+      .first()
+    if (!target) {
+      return null
+    }
+
+    const [before, after] = await Promise.all([
+      Message.query()
+        .where('conversation_id', conversation.id)
+        .where('id', '<', target.id)
+        .whereRaw(NOT_HIDDEN_FOR_USER, [viewer.id])
+        .preload('sender')
+        .preload('attachments')
+        .orderBy('id', 'desc')
+        .limit(CONTEXT_BEFORE),
+      Message.query()
+        .where('conversation_id', conversation.id)
+        .where('id', '>=', target.id)
+        .whereRaw(NOT_HIDDEN_FOR_USER, [viewer.id])
+        .preload('sender')
+        .preload('attachments')
+        .orderBy('id', 'asc')
+        .limit(CONTEXT_AFTER),
+    ])
+
+    return [...before.reverse(), ...after]
   }
 
   /**
@@ -163,6 +214,7 @@ export default class ConversationService {
 
     const existing = await Conversation.findBy('private_key', privateKey)
     if (existing) {
+      await this.ensureMembers(existing, [user.id, other.id])
       return existing
     }
 
@@ -190,9 +242,49 @@ export default class ConversationService {
        */
       const concurrent = await Conversation.findBy('private_key', privateKey)
       if (concurrent) {
+        await this.ensureMembers(concurrent, [user.id, other.id])
         return concurrent
       }
       throw error
+    }
+  }
+
+  /**
+   * Quitte une conversation : la discussion disparaît de la liste de
+   * l'utilisateur. Pour un groupe, un autre administrateur est promu si besoin.
+   */
+  async leave(user: User, conversationId: number) {
+    const conversation = await this.findForMember(user, conversationId)
+
+    await db.transaction(async (trx) => {
+      const membership = await ConversationMember.query({ client: trx })
+        .where('conversation_id', conversation.id)
+        .where('user_id', user.id)
+        .firstOrFail()
+
+      await membership.useTransaction(trx).delete()
+
+      if (conversation.type === 'group') {
+        const remaining = await ConversationMember.query({ client: trx })
+          .where('conversation_id', conversation.id)
+          .orderBy('joined_at', 'asc')
+
+        if (remaining.length > 0 && !remaining.some((member) => member.role === 'admin')) {
+          remaining[0].role = 'admin'
+          await remaining[0].useTransaction(trx).save()
+        }
+      }
+    })
+
+    return conversation
+  }
+
+  private async ensureMembers(conversation: Conversation, userIds: number[]) {
+    for (const userId of userIds) {
+      await ConversationMember.firstOrCreate(
+        { conversationId: conversation.id, userId },
+        { role: 'member' }
+      )
     }
   }
 
@@ -213,7 +305,10 @@ export default class ConversationService {
       .groupBy('conversation_id')
       .max('id')
 
-    const messages = await Message.query().whereIn('id', latestIds).preload('sender')
+    const messages = await Message.query()
+      .whereIn('id', latestIds)
+      .preload('sender')
+      .preload('attachments')
     for (const message of messages) {
       lastMessages.set(message.conversationId, message)
     }
@@ -253,22 +348,163 @@ export default class ConversationService {
   }
 
   /**
-   * Marque tous les messages actuels de la conversation comme lus pour cet utilisateur.
+   * Marque tous les messages actuels de la conversation comme lus par cet
+   * utilisateur (et donc aussi comme reçus).
+   *
+   * Renvoie les identifiants des messages des autres membres dont le statut
+   * vient de changer : l'appelant les annonce en temps réel pour que leurs
+   * auteurs voient les traits passer au bleu.
    */
-  async markAsRead(conversationId: number, userId: number) {
+  async markAsRead(conversationId: number, userId: number): Promise<number[]> {
+    const membership = await ConversationMember.query()
+      .where('conversation_id', conversationId)
+      .where('user_id', userId)
+      .first()
+    if (!membership) {
+      return []
+    }
+
     const latestMessage = await Message.query()
       .where('conversation_id', conversationId)
       .orderBy('id', 'desc')
       .first()
-
-    if (latestMessage) {
-      await ConversationMember.query()
-        .where('conversation_id', conversationId)
-        .where('user_id', userId)
-        .where((q) => {
-          q.whereNull('last_read_message_id').orWhere('last_read_message_id', '<', latestMessage.id)
-        })
-        .update({ last_read_message_id: latestMessage.id })
+    if (!latestMessage) {
+      return []
     }
+
+    const previousRead = membership.lastReadMessageId ?? 0
+    const previousDelivered = membership.lastDeliveredMessageId ?? 0
+    if (previousRead >= latestMessage.id && previousDelivered >= latestMessage.id) {
+      return []
+    }
+
+    await ConversationMember.query()
+      .where('id', membership.id)
+      .update({
+        last_read_message_id: db.raw('GREATEST(COALESCE(last_read_message_id, 0), ?)', [
+          latestMessage.id,
+        ]),
+        last_delivered_message_id: db.raw('GREATEST(COALESCE(last_delivered_message_id, 0), ?)', [
+          latestMessage.id,
+        ]),
+      })
+
+    return this.changedMessageIds(
+      conversationId,
+      userId,
+      Math.min(previousRead, previousDelivered),
+      latestMessage.id
+    )
+  }
+
+  /**
+   * Marque tous les messages actuels de la conversation comme reçus par cet
+   * utilisateur (il est connecté, mais n'a pas forcément ouvert la
+   * conversation). Renvoie les identifiants des messages dont le statut change.
+   */
+  async markAsDelivered(conversationId: number, userId: number): Promise<number[]> {
+    const membership = await ConversationMember.query()
+      .where('conversation_id', conversationId)
+      .where('user_id', userId)
+      .first()
+    if (!membership) {
+      return []
+    }
+
+    const latestMessage = await Message.query()
+      .where('conversation_id', conversationId)
+      .orderBy('id', 'desc')
+      .first()
+    if (!latestMessage) {
+      return []
+    }
+
+    const previousDelivered = membership.lastDeliveredMessageId ?? 0
+    if (previousDelivered >= latestMessage.id) {
+      return []
+    }
+
+    await ConversationMember.query()
+      .where('id', membership.id)
+      .update({
+        last_delivered_message_id: db.raw('GREATEST(COALESCE(last_delivered_message_id, 0), ?)', [
+          latestMessage.id,
+        ]),
+      })
+
+    return this.changedMessageIds(conversationId, userId, previousDelivered, latestMessage.id)
+  }
+
+  /**
+   * Marque comme reçus les messages en attente dans toutes les conversations
+   * de l'utilisateur : il vient de se connecter ou de rouvrir l'application.
+   * Renvoie, par conversation, les messages dont le statut change.
+   */
+  async markAllAsDelivered(userId: number): Promise<Map<number, number[]>> {
+    const changes = new Map<number, number[]>()
+
+    const pending = await ConversationMember.query()
+      .where('user_id', userId)
+      .whereRaw(
+        `COALESCE(last_delivered_message_id, 0) < COALESCE((
+          SELECT MAX(messages.id) FROM messages
+          WHERE messages.conversation_id = conversation_members.conversation_id
+        ), 0)`
+      )
+
+    for (const member of pending) {
+      const messageIds = await this.markAsDelivered(member.conversationId, userId)
+      if (messageIds.length > 0) {
+        changes.set(member.conversationId, messageIds)
+      }
+    }
+
+    return changes
+  }
+
+  /**
+   * Marque un message comme reçu par des membres précis (ceux qui étaient en
+   * ligne au moment de l'envoi).
+   */
+  async markDeliveredFor(conversationId: number, userIds: number[], messageId: number) {
+    if (userIds.length === 0) {
+      return
+    }
+
+    await ConversationMember.query()
+      .where('conversation_id', conversationId)
+      .whereIn('user_id', userIds)
+      .where((pointer) => {
+        pointer
+          .whereNull('last_delivered_message_id')
+          .orWhere('last_delivered_message_id', '<', messageId)
+      })
+      .update({ last_delivered_message_id: messageId })
+  }
+
+  /**
+   * Messages d'autres membres (non supprimés) dont le statut change quand
+   * `readerId` avance son pointeur de `afterId` à `upToId`. Les plus récents
+   * seulement, du plus ancien au plus récent.
+   */
+  private async changedMessageIds(
+    conversationId: number,
+    readerId: number,
+    afterId: number,
+    upToId: number
+  ) {
+    const rows = await db
+      .from('messages')
+      .select('id')
+      .where('conversation_id', conversationId)
+      .where('sender_id', '!=', readerId)
+      .whereNull('deleted_at')
+      .whereNull('silenced_at')
+      .where('id', '>', afterId)
+      .where('id', '<=', upToId)
+      .orderBy('id', 'desc')
+      .limit(STATUS_CHANGE_LIMIT)
+
+    return rows.map((row) => Number(row.id)).reverse()
   }
 }

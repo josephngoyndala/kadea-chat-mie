@@ -1,9 +1,10 @@
 @layouts.messenger({ title: 'Discussions', bottomNav: true })
   <div class="flex min-h-0 w-full min-w-0 max-w-full flex-1 overflow-hidden">
-    <aside class="flex min-h-0 min-w-0 max-w-full flex-1 flex-col lg:w-[380px] lg:flex-none lg:border-r lg:border-line">
+    <aside
+      class="flex min-h-0 min-w-0 max-w-full flex-1 flex-col lg:w-[380px] lg:flex-none lg:border-r lg:border-line"
+    >
       @include('partials/conversation_list')
     </aside>
-
     {{-- Zone de droite : visible uniquement quand la liste et la discussion sont côte à côte --}}
     <section class="hidden min-w-0 flex-1 items-center justify-center bg-paper p-8 lg:flex">
       <div class="flex max-w-sm flex-col items-center gap-4 text-center">
@@ -11,7 +12,9 @@
           @svg('lucide:message-circle', { width: 36, height: 36 })
         </span>
         <h2 class="text-xl font-extrabold tracking-tight">Vos discussions</h2>
-        <p class="text-muted">Sélectionnez une conversation dans la liste, ou démarrez-en une nouvelle.</p>
+        <p class="text-muted">
+          Sélectionnez une conversation dans la liste, ou démarrez-en une nouvelle.
+        </p>
       </div>
     </section>
   </div>

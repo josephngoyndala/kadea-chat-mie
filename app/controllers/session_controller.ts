@@ -2,6 +2,7 @@ import { errors as authErrors } from '@adonisjs/auth'
 import limiter from '@adonisjs/limiter/services/main'
 import { DateTime } from 'luxon'
 import User from '#models/user'
+import ConversationService from '#services/conversation_service'
 import RealtimeService from '#services/realtime_service'
 import { loginValidator } from '#validators/user'
 import type { HttpContext } from '@adonisjs/core/http'
@@ -11,6 +12,7 @@ import type { HttpContext } from '@adonisjs/core/http'
  * formulaire, vérification des identifiants et fin de session.
  */
 export default class SessionController {
+  private conversations = new ConversationService()
   private realtime = new RealtimeService()
 
   /**
@@ -77,7 +79,9 @@ export default class SessionController {
   }
 
   /**
-   * Maintient le statut en ligne de l'utilisateur actif
+   * Maintient le statut en ligne de l'utilisateur actif. Un utilisateur qui
+   * donne signe de vie est connecté : les messages qui l'attendaient passent
+   * à « reçus » (deux traits chez leurs auteurs).
    */
   async ping({ auth, response }: HttpContext) {
     const user = auth.user
@@ -85,6 +89,11 @@ export default class SessionController {
       user.lastSeenAt = DateTime.now()
       await user.save()
       this.realtime.userPresence(user.id, true)
+
+      const changes = await this.conversations.markAllAsDelivered(user.id)
+      for (const [conversationId, messageIds] of changes) {
+        this.realtime.statusChanged(conversationId, messageIds)
+      }
     }
     return response.noContent()
   }
@@ -109,6 +118,16 @@ export default class SessionController {
         blockDuration: '15 mins',
       },
     ])
+
+    const existing = await User.findBy('email', email)
+    if (existing && !existing.password) {
+      session.flashOnly(['email'])
+      session.flash(
+        'error',
+        'Ce compte utilise la connexion Google. Cliquez sur « Continuer avec Google ».'
+      )
+      return null
+    }
 
     try {
       /**

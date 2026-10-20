@@ -68,14 +68,51 @@ document.addEventListener('click', (event) => {
 })
 
 /**
+ * Téléchargement d'une pièce jointe : tout élément portant l'attribut
+ * data-download-url télécharge le fichier sous son nom d'origine. Si le
+ * navigateur ne peut pas le récupérer, le fichier s'ouvre dans un nouvel onglet.
+ */
+document.addEventListener('click', async (event) => {
+  const trigger =
+    event.target instanceof Element ? event.target.closest('[data-download-url]') : null
+  if (!trigger) {
+    return
+  }
+
+  event.preventDefault()
+  const url = trigger.dataset.downloadUrl
+  const name = trigger.dataset.downloadName || 'fichier'
+
+  try {
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error('download')
+    }
+
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(await response.blob())
+    link.download = name
+    document.body.append(link)
+    link.click()
+    link.remove()
+    setTimeout(() => URL.revokeObjectURL(link.href), 10000)
+  } catch {
+    window.open(url, '_blank', 'noopener')
+  }
+})
+
+/**
  * Appel au serveur utilisé par la messagerie : le serveur répond par le
  * morceau de HTML à insérer dans la page.
  */
-function postToServer(form) {
+function postToServer(form, bodyOverride) {
+  const headers = { 'X-Chat-Fetch': '1', 'Accept': 'application/json' }
+  const body = bodyOverride ?? new URLSearchParams(new FormData(form))
+
   return fetch(form.action, {
     method: 'POST',
-    headers: { 'X-Chat-Fetch': '1', Accept: 'application/json' },
-    body: new URLSearchParams(new FormData(form)),
+    headers,
+    body,
   })
 }
 
@@ -173,11 +210,33 @@ Alpine.data('conversationChat', function () {
     searchResults: [],
     currentSearchIndex: -1,
     originalMessageContents: new Map(),
+    emojiOpen: false,
+    emojiChoices: [
+      '😀',
+      '😂',
+      '😍',
+      '🥰',
+      '😊',
+      '😢',
+      '😡',
+      '👍',
+      '👏',
+      '🙏',
+      '🔥',
+      '❤️',
+      '💯',
+      '🎉',
+      '✅',
+      '🚀',
+    ],
+    pendingFiles: [],
 
     init() {
       this.conversationId = this.$el.dataset.conversationId
       this.userId = parseInt(this.$el.dataset.userId || '0', 10)
-      this.otherUserId = this.$el.dataset.otherUserId ? parseInt(this.$el.dataset.otherUserId, 10) : null
+      this.otherUserId = this.$el.dataset.otherUserId
+        ? parseInt(this.$el.dataset.otherUserId, 10)
+        : null
       this.isOnline = this.$el.dataset.isOnline === '1'
       this.messageUrlTemplate = this.$el.dataset.messageUrl || ''
       this.catchUpUrl = this.$el.dataset.catchUpUrl || ''
@@ -188,7 +247,7 @@ Alpine.data('conversationChat', function () {
     },
 
     get canSend() {
-      return this.draft.trim().length > 0 && !this.sending
+      return (this.draft.trim().length > 0 || this.pendingFiles.length > 0) && !this.sending
     },
 
     /**
@@ -213,9 +272,7 @@ Alpine.data('conversationChat', function () {
 
       // 1. Canal de la conversation (messages et indicateur de saisie)
       if (this.conversationId) {
-        const conversationSub = transmit.subscription(
-          `conversations/${this.conversationId}`
-        )
+        const conversationSub = transmit.subscription(`conversations/${this.conversationId}`)
         await conversationSub.create()
 
         conversationSub.onMessage((event) => {
@@ -274,7 +331,10 @@ Alpine.data('conversationChat', function () {
      * termine par /0, que l'on remplace par l'identifiant.
      */
     messageUrl(messageId) {
-      return (this.messageUrlTemplate || this.$el.dataset.messageUrl || '').replace(/\/0$/, `/${messageId}`)
+      return (this.messageUrlTemplate || this.$el.dataset.messageUrl || '').replace(
+        /\/0$/,
+        `/${messageId}`
+      )
     },
 
     /**
@@ -402,6 +462,101 @@ Alpine.data('conversationChat', function () {
       }
     },
 
+    insertEmoji(emoji) {
+      this.draft += emoji
+      this.emojiOpen = false
+      this.$nextTick(() => {
+        this.onInput()
+        this.$refs.field?.focus()
+      })
+    },
+
+    onFilesSelected(event) {
+      const picked = [...(event.target.files ?? [])]
+      event.target.value = ''
+      this.error = ''
+
+      const allowed = /\.(jpe?g|png|webp|gif|mp4|webm|mov|pdf|txt|zip)$/i
+
+      for (const file of picked) {
+        if (this.pendingFiles.length >= 5) {
+          this.error = 'Vous ne pouvez pas envoyer plus de 5 fichiers à la fois.'
+          break
+        }
+
+        if (file.size > 20 * 1024 * 1024) {
+          this.error = 'Un fichier dépasse la taille maximale de 20 Mo.'
+          continue
+        }
+
+        if (!allowed.test(file.name)) {
+          this.error =
+            'Format non accepté. Images, vidéos (MP4, WebM, MOV), PDF, TXT ou ZIP uniquement.'
+          continue
+        }
+
+        const key = `${file.name}-${file.size}-${file.lastModified}`
+        let kind = 'file'
+        let preview = null
+
+        if (file.type.startsWith('image/')) {
+          kind = 'image'
+          preview = URL.createObjectURL(file)
+        } else if (file.type.startsWith('video/')) {
+          kind = 'video'
+          preview = URL.createObjectURL(file)
+        }
+
+        this.pendingFiles.push({ key, file, name: file.name, preview, kind })
+      }
+    },
+
+    removePendingFile(index) {
+      const item = this.pendingFiles[index]
+      if (item?.preview) {
+        URL.revokeObjectURL(item.preview)
+      }
+      this.pendingFiles.splice(index, 1)
+    },
+
+    clearPendingFiles() {
+      for (const item of this.pendingFiles) {
+        if (item.preview) {
+          URL.revokeObjectURL(item.preview)
+        }
+      }
+      this.pendingFiles = []
+    },
+
+    csrfFromForm(form) {
+      return form.querySelector('input[name="_csrf"]')?.value ?? ''
+    },
+
+    buildSendFormData(form) {
+      const formData = new FormData()
+      const csrf = this.csrfFromForm(form)
+      if (csrf) {
+        formData.append('_csrf', csrf)
+      }
+      formData.append('body', this.draft.trim())
+
+      for (const item of this.pendingFiles) {
+        formData.append('attachments[]', item.file, item.file.name)
+      }
+
+      return formData
+    },
+
+    buildTextPayload(form) {
+      const params = new URLSearchParams()
+      const csrf = this.csrfFromForm(form)
+      if (csrf) {
+        params.append('_csrf', csrf)
+      }
+      params.append('body', this.draft.trim())
+      return params
+    },
+
     sendTypingSignal() {
       const csrf = document.querySelector('meta[name="csrf-token"]')?.content
       const convId = this.conversationId || this.$el.dataset.conversationId
@@ -513,7 +668,14 @@ Alpine.data('conversationChat', function () {
       if (!target) return
 
       target.setAttribute('data-search-target', '1')
-      target.classList.add('ring-4', 'ring-brand/40', 'bg-brand-50/50', 'transition-all', 'duration-300', 'rounded-2xl')
+      target.classList.add(
+        'ring-4',
+        'ring-brand/40',
+        'bg-brand-50/50',
+        'transition-all',
+        'duration-300',
+        'rounded-2xl'
+      )
 
       target.scrollIntoView({ behavior: 'smooth', block: 'center' })
     },
@@ -618,11 +780,15 @@ Alpine.data('conversationChat', function () {
       if (this.typingTimer) clearTimeout(this.typingTimer)
 
       try {
-        const response = await postToServer(event.target)
+        const form = event.target
+        const payload =
+          this.pendingFiles.length > 0 ? this.buildSendFormData(form) : this.buildTextPayload(form)
+        const response = await postToServer(form, payload)
 
         if (response.status === 201) {
           this.insertHtml(await response.text())
           this.draft = ''
+          this.clearPendingFiles()
           this.$nextTick(() => {
             this.autosize()
             this.scrollToBottom()
@@ -777,10 +943,17 @@ Alpine.data('conversationList', function () {
         const title = (card.dataset.title || card.textContent || '').toLowerCase()
         const isGroup = card.dataset.isGroup === '1'
 
+        const hasUnread = parseInt(card.dataset.unreadCount || '0', 10) > 0
+
+        /**
+         * « Directes » et « Groupes » ne montrent que les discussions qui ont
+         * des messages non lus : dès qu'on les a lus, la discussion disparaît
+         * de ces onglets (elle reste dans « Toutes »).
+         */
         let matchesSearch = !q || title.includes(q)
         let matchesFilter = true
-        if (this.filter === 'groups') matchesFilter = isGroup
-        if (this.filter === 'direct') matchesFilter = !isGroup
+        if (this.filter === 'groups') matchesFilter = isGroup && hasUnread
+        if (this.filter === 'direct') matchesFilter = !isGroup && hasUnread
 
         if (matchesSearch && matchesFilter) {
           card.classList.remove('hidden')
@@ -867,6 +1040,17 @@ Alpine.data('conversationList', function () {
         window.location.assign(this.$el.dataset.dashboardUrl)
       }
     },
+  }
+})
+
+/**
+ * Le bouton « Retour » du navigateur peut rouvrir une page telle qu'elle était
+ * (compteurs de messages non lus périmés, par exemple) : on la recharge pour
+ * qu'elle reflète l'état actuel.
+ */
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) {
+    window.location.reload()
   }
 })
 

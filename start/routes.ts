@@ -31,6 +31,18 @@ router
     router.get('login', [controllers.Session, 'create'])
     router.post('login', [controllers.Session, 'store']).use(sensitiveThrottle)
 
+    router
+      .get('auth/google/redirect', [
+        () => import('#controllers/google_auth_controller'),
+        'redirect',
+      ])
+      .as('google.redirect')
+    router
+      .get('auth/google/callback', [
+        () => import('#controllers/google_auth_controller'),
+        'callback',
+      ])
+      .as('google.callback')
     router.get('email/verification', [controllers.EmailVerification, 'notice'])
     router.get('email/verify/:token', [controllers.EmailVerification, 'verify'])
     router
@@ -55,6 +67,9 @@ router
       .where('id', router.matchers.number())
     router
       .get('conversations/:id/card', [controllers.Conversations, 'card'])
+      .where('id', router.matchers.number())
+    router
+      .post('conversations/:id/delete', [controllers.Conversations, 'destroy'])
       .where('id', router.matchers.number())
     router
       .post('conversations/:id/read', [controllers.Conversations, 'read'])
@@ -83,6 +98,15 @@ router
       ])
       .where('conversationId', router.matchers.number())
       .where('userId', router.matchers.number())
+    router
+      .post('conversations/:conversationId/avatar', [controllers.GroupMembers, 'updateAvatar'])
+      .where('conversationId', router.matchers.number())
+    router
+      .post('conversations/:conversationId/avatar/delete', [
+        controllers.GroupMembers,
+        'destroyAvatar',
+      ])
+      .where('conversationId', router.matchers.number())
 
     router
       .get('conversations/:conversationId/messages', [controllers.Messages, 'index'])
@@ -110,7 +134,15 @@ router
       .where('conversationId', router.matchers.number())
       .where('messageId', router.matchers.number())
 
+    router.get('messages/search', [controllers.MessageSearch, 'index']).as('messages.search')
+
     router.get('users', [controllers.Users, 'index'])
+    router
+      .post('users/:userId/block', [controllers.Blocks, 'store'])
+      .where('userId', router.matchers.number())
+    router
+      .post('users/:userId/unblock', [controllers.Blocks, 'destroy'])
+      .where('userId', router.matchers.number())
 
     router.get('profile', [controllers.Profile, 'show'])
     router.post('profile', [controllers.Profile, 'update'])

@@ -5,16 +5,28 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#e4203d" />
-    <title>{{ pageTitle ? `${pageTitle} · Kadea Chat` : 'Kadea Chat · La messagerie de Kadea Academy' }}</title>
+    <title>
+      {{
+        pageTitle
+          ? `${pageTitle} · Kadea Chat`
+          : 'Kadea Chat · La messagerie de Kadea Academy'
+      }}
+    </title>
+    @include('partials/theme_init')
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @stack('dumper')
   </head>
   <body class="min-h-screen bg-white">
     <header class="absolute inset-x-0 top-0 z-10">
-      <div class="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-5 sm:px-10 sm:py-6">
+      <div
+        class="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-5 sm:px-10 sm:py-6"
+      >
         @!logo({ size: 40 })
         <nav class="flex items-center gap-2 sm:gap-6">
-          <a href="/" class="hidden px-2 text-[15px] font-semibold text-ink/80 transition hover:text-ink sm:inline">
+          <a
+            href="/"
+            class="hidden px-2 text-[15px] font-semibold text-ink/80 transition hover:text-ink sm:inline"
+          >
             Accueil
           </a>
           @if(auth?.user)
@@ -22,7 +34,10 @@
               Mes discussions
             @end
           @else
-            <a href="{{ urlFor('session.create') }}" class="hidden px-2 text-[15px] font-semibold text-ink/80 transition hover:text-ink sm:inline">
+            <a
+              href="{{ urlFor('session.create') }}"
+              class="hidden px-2 text-[15px] font-semibold text-ink/80 transition hover:text-ink sm:inline"
+            >
               Se connecter
             </a>
             @button({ route: 'new_account.create', variant: 'dark', size: 'nav' })
@@ -32,7 +47,6 @@
         </nav>
       </div>
     </header>
-
     {{{ await $slots.main() }}}
     @include('partials/flash_alerts')
   </body>

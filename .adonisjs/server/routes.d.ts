@@ -13,6 +13,8 @@ export type ScannedRoutes = {
     'new_account.store': { paramsTuple?: []; params?: {} }
     'session.create': { paramsTuple?: []; params?: {} }
     'session.store': { paramsTuple?: []; params?: {} }
+    'google.redirect': { paramsTuple?: []; params?: {} }
+    'google.callback': { paramsTuple?: []; params?: {} }
     'email_verification.notice': { paramsTuple?: []; params?: {} }
     'email_verification.verify': { paramsTuple: [ParamValue]; params: {'token': ParamValue} }
     'email_verification.resend': { paramsTuple?: []; params?: {} }
@@ -25,6 +27,7 @@ export type ScannedRoutes = {
     'dashboard': { paramsTuple?: []; params?: {} }
     'conversations.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'conversations.card': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'conversations.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'conversations.read': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'conversations.typing': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'conversations.search': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -34,12 +37,17 @@ export type ScannedRoutes = {
     'group_members.index': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
     'group_members.store': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
     'group_members.destroy': { paramsTuple: [ParamValue,ParamValue]; params: {'conversationId': ParamValue,'userId': ParamValue} }
+    'group_members.update_avatar': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
+    'group_members.destroy_avatar': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
     'messages.index': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
     'messages.show': { paramsTuple: [ParamValue,ParamValue]; params: {'conversationId': ParamValue,'messageId': ParamValue} }
     'messages.store': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
     'messages.update': { paramsTuple: [ParamValue,ParamValue]; params: {'conversationId': ParamValue,'messageId': ParamValue} }
     'messages.destroy': { paramsTuple: [ParamValue,ParamValue]; params: {'conversationId': ParamValue,'messageId': ParamValue} }
+    'messages.search': { paramsTuple?: []; params?: {} }
     'users.index': { paramsTuple?: []; params?: {} }
+    'blocks.store': { paramsTuple: [ParamValue]; params: {'userId': ParamValue} }
+    'blocks.destroy': { paramsTuple: [ParamValue]; params: {'userId': ParamValue} }
     'profile.show': { paramsTuple?: []; params?: {} }
     'profile.update': { paramsTuple?: []; params?: {} }
     'profile.update_avatar': { paramsTuple?: []; params?: {} }
@@ -52,6 +60,8 @@ export type ScannedRoutes = {
     'home': { paramsTuple?: []; params?: {} }
     'new_account.create': { paramsTuple?: []; params?: {} }
     'session.create': { paramsTuple?: []; params?: {} }
+    'google.redirect': { paramsTuple?: []; params?: {} }
+    'google.callback': { paramsTuple?: []; params?: {} }
     'email_verification.notice': { paramsTuple?: []; params?: {} }
     'email_verification.verify': { paramsTuple: [ParamValue]; params: {'token': ParamValue} }
     'password_reset.create': { paramsTuple?: []; params?: {} }
@@ -64,6 +74,7 @@ export type ScannedRoutes = {
     'group_members.index': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
     'messages.index': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
     'messages.show': { paramsTuple: [ParamValue,ParamValue]; params: {'conversationId': ParamValue,'messageId': ParamValue} }
+    'messages.search': { paramsTuple?: []; params?: {} }
     'users.index': { paramsTuple?: []; params?: {} }
     'profile.show': { paramsTuple?: []; params?: {} }
   }
@@ -73,6 +84,8 @@ export type ScannedRoutes = {
     'home': { paramsTuple?: []; params?: {} }
     'new_account.create': { paramsTuple?: []; params?: {} }
     'session.create': { paramsTuple?: []; params?: {} }
+    'google.redirect': { paramsTuple?: []; params?: {} }
+    'google.callback': { paramsTuple?: []; params?: {} }
     'email_verification.notice': { paramsTuple?: []; params?: {} }
     'email_verification.verify': { paramsTuple: [ParamValue]; params: {'token': ParamValue} }
     'password_reset.create': { paramsTuple?: []; params?: {} }
@@ -85,6 +98,7 @@ export type ScannedRoutes = {
     'group_members.index': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
     'messages.index': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
     'messages.show': { paramsTuple: [ParamValue,ParamValue]; params: {'conversationId': ParamValue,'messageId': ParamValue} }
+    'messages.search': { paramsTuple?: []; params?: {} }
     'users.index': { paramsTuple?: []; params?: {} }
     'profile.show': { paramsTuple?: []; params?: {} }
   }
@@ -98,15 +112,20 @@ export type ScannedRoutes = {
     'password_reset.update': { paramsTuple: [ParamValue]; params: {'token': ParamValue} }
     'session.destroy': { paramsTuple?: []; params?: {} }
     'session.ping': { paramsTuple?: []; params?: {} }
+    'conversations.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'conversations.read': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'conversations.typing': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'conversations.store': { paramsTuple?: []; params?: {} }
     'groups.store': { paramsTuple?: []; params?: {} }
     'group_members.store': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
     'group_members.destroy': { paramsTuple: [ParamValue,ParamValue]; params: {'conversationId': ParamValue,'userId': ParamValue} }
+    'group_members.update_avatar': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
+    'group_members.destroy_avatar': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
     'messages.store': { paramsTuple: [ParamValue]; params: {'conversationId': ParamValue} }
     'messages.update': { paramsTuple: [ParamValue,ParamValue]; params: {'conversationId': ParamValue,'messageId': ParamValue} }
     'messages.destroy': { paramsTuple: [ParamValue,ParamValue]; params: {'conversationId': ParamValue,'messageId': ParamValue} }
+    'blocks.store': { paramsTuple: [ParamValue]; params: {'userId': ParamValue} }
+    'blocks.destroy': { paramsTuple: [ParamValue]; params: {'userId': ParamValue} }
     'profile.update': { paramsTuple?: []; params?: {} }
     'profile.update_avatar': { paramsTuple?: []; params?: {} }
     'profile.destroy_avatar': { paramsTuple?: []; params?: {} }

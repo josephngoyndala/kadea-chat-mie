@@ -26,7 +26,7 @@ export default class UsersController {
     return view.render('pages/users/index', {
       term,
       searched: term.length > 0,
-      members: await this.presenter.directory(paginator.all()),
+      members: await this.presenter.directory(paginator.all(), viewer),
       total: paginator.total,
       previousUrl: paginator.currentPage > 1 ? this.pageUrl(term, paginator.currentPage - 1) : null,
       nextUrl: paginator.hasMorePages ? this.pageUrl(term, paginator.currentPage + 1) : null,
